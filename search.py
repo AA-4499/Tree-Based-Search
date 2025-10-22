@@ -80,6 +80,75 @@ def bfs_search(nodes, edges, start_id, goals, verbose=False):
     
     return None, nodes_explored
 
+def gbfs_search(nodes, edges, start_id, goals, verbose=False):
+    """
+    Greedy Best-First Search that expands nodes purely by the heuristic distance
+    to the nearest goal. Returns (path, nodes_explored) or (None, nodes_explored)
+    if no goal can be reached.
+    """
+    for node in nodes.values():
+        node.parent = None
+
+    def best_heuristic(node_id):
+        current = nodes[node_id]
+        return min(heuristic(current, nodes[goal]) for goal in goals)
+
+    counter = 0
+    open_set = []
+    start_h = best_heuristic(start_id)
+    heapq.heappush(open_set, (start_h, counter, start_id))
+    counter += 1
+
+    explored = set()
+    parent = {start_id: None}
+    nodes_explored = 0
+
+    if verbose:
+        print("\nGBFS Trace:")
+        print(f"Start node: {start_id} h={start_h:.2f}")
+
+    while open_set:
+        current_h, _, current_id = heapq.heappop(open_set)
+        if current_id in explored:
+            continue
+
+        explored.add(current_id)
+        nodes_explored += 1
+
+        if verbose:
+            print(f"\nExpand node {current_id}: h={current_h:.2f} (expanded count={nodes_explored})")
+
+        if current_id in goals:
+            path = []
+            walker = current_id
+            while walker is not None:
+                path.append(walker)
+                walker = parent[walker]
+            return path[::-1], nodes_explored
+
+        for neighbor_id, _ in sorted(edges.get(current_id, {}).items(), key=lambda x: x[0]):
+            if neighbor_id in explored:
+                if verbose:
+                    print(f"  Neighbor {neighbor_id}: skipped (in closed set)")
+                continue
+
+            if neighbor_id not in parent:
+                parent[neighbor_id] = current_id
+
+            neighbor_h = best_heuristic(neighbor_id)
+            # Greedy strategy: always push the neighbor with the lowest heuristic distance first.
+            heapq.heappush(open_set, (neighbor_h, counter, neighbor_id))
+            counter += 1
+
+            if verbose:
+                print(f"  Neighbor {neighbor_id}: h={neighbor_h:.2f} pushed to open set")
+
+        if verbose:
+            open_snapshot = ", ".join(f"{nid}(h={hval:.2f})" for hval, _, nid in open_set)
+            print(f"  Open set: [{open_snapshot}]")
+
+    return None, nodes_explored
+
 def a_star_search(nodes, edges, start_id, goals, verbose=False):
     # reset node costs (so repeated runs work)
     for n in nodes.values():
@@ -208,7 +277,7 @@ def run_search(method, nodes, edges, start_id, goals, verbose=False):
     search_methods = {
         'BFS': ('Breadth-First Search', bfs_search),
         'DFS': ('Depth-First Search', dfs_search),
-        'GBFS': ('Greedy Best-First Search', None),  # Placeholder for GBFS
+        'GBFS': ('Greedy Best-First Search', gbfs_search),
         'AS': ('A* Search', a_star_search)
     }
     
