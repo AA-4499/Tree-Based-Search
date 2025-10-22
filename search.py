@@ -1,15 +1,16 @@
 import math
 import heapq
 import sys
+from collections import deque
 
 class Node:
     def __init__(self, id, x, y):
         self.id = id
         self.x = x
         self.y = y
-        self.g = float('inf')  # Cost from start to current node
-        self.h = 0  # Heuristic (estimated cost to goal)
-        self.f = float('inf')  # Total cost (g + h)
+        self.g = float('inf')
+        self.h = 0
+        self.f = float('inf')
         self.parent = None
 
 def parse_input_file(filename):
@@ -49,16 +50,34 @@ def parse_input_file(filename):
     return nodes, edges, origin, destinations
 
 def heuristic(node, goal_node):
-    # Euclidean distance
     return math.sqrt((node.x - goal_node.x)**2 + (node.y - goal_node.y)**2)
 
-def bfs_search(nodes, edges, start_id, goals):
-    return None, nodes_explored
-
-def dfs_search(nodes, edges, start_id, goals):
-    return None, nodes_explored
-
-def gbfs_search(nodes, edges, start_id, goals):
+def bfs_search(nodes, edges, start_id, goals, verbose=False):
+    queue = deque([(start_id, [start_id])])
+    visited = set([start_id])
+    nodes_explored = 0
+    
+    if verbose:
+        print("\nBFS Expansion Trace:")
+    
+    while queue:
+        current_id, path = queue.popleft()
+        nodes_explored += 1
+        
+        if verbose:
+            current = nodes[current_id]
+            print(f"Expand node {current_id} ({current.x},{current.y})")
+        
+        if current_id in goals:
+            return path, nodes_explored
+        
+        if current_id in edges:
+            neighbors = [(nid, w) for nid, w in edges[current_id].items()]
+            for neighbor_id, _ in sorted(neighbors, key=lambda x: x[0]):
+                if neighbor_id not in visited:
+                    visited.add(neighbor_id)
+                    queue.append((neighbor_id, path + [neighbor_id]))
+    
     return None, nodes_explored
 
 def a_star_search(nodes, edges, start_id, goals, verbose=False):
@@ -138,17 +157,31 @@ def a_star_search(nodes, edges, start_id, goals, verbose=False):
 
     return None, nodes_explored
 
-def main():
-    # Allow optional command-line args: filename and method
-    filename = "PathFinder-test.txt"
-    method_arg = None
-    if len(sys.argv) >= 2:
-        filename = sys.argv[1]
-    if len(sys.argv) >= 3:
-        method_arg = sys.argv[2].strip().upper()
+def run_search(method, nodes, edges, start_id, goals, verbose=False):
+    """Wrapper function to run the selected search method"""
+    search_methods = {
+        'BFS': ('Breadth-First Search', bfs_search),
+        'DFS': ('Depth-First Search', None),  # Placeholder for DFS
+        'GBFS': ('Greedy Best-First Search', None),  # Placeholder for GBFS
+        'AS': ('A* Search', a_star_search)
+    }
+    
+    if method not in search_methods:
+        raise ValueError(f"Unknown search method: {method}")
+    
+    method_name, search_func = search_methods[method]
+    
+    if search_func is None:
+        print(f"\n{method_name} is not implemented yet!")
+        return None, 0
+    
+    path, nodes_explored = search_func(nodes, edges, start_id, goals, verbose)
+    
+    return path, nodes_explored, method_name
 
-    # Show graph information before running search
-    print("\nGraph information (from PathFinder-test.txt):\n")
+def print_graph_info(filename):
+    """Print the graph information"""
+    print(f"\nGraph information (from {filename}):\n")
     print("Nodes:")
     print("1: (4,1)")
     print("2: (2,2)")
@@ -176,52 +209,52 @@ def main():
     print("Destinations:")
     print("5; 4\n")
 
-    print("Available Search Algorithms:")
+def main():
+    # Parse command line arguments
+    filename = "PathFinder-test.txt"
+    method_arg = None
+    if len(sys.argv) >= 2:
+        filename = sys.argv[1]
+    if len(sys.argv) >= 3:
+        method_arg = sys.argv[2].strip().upper()
+
+    # Print graph information
+    print_graph_info(filename)
+
+    # Show available search methods
+    print("\nAvailable Search Algorithms:")
     print("1. Breadth-First Search (BFS)")
     print("2. Depth-First Search (DFS)")
     print("3. Greedy Best-First Search (GBFS)")
     print("4. A* Search (AS)")
 
-    choice = None
-    if method_arg:
-        map_arg = {
-            "BFS": "1", "DFS": "2", "GBFS": "3", "AS": "4",
-            "1": "1", "2": "2", "3": "3", "4": "4"
-        }
-        choice = map_arg.get(method_arg)
-        if choice is None:
-            print(f"\nUnknown method '{method_arg}'. Falling back to interactive selection.\n")
+    # Get search method choice
+    method_map = {
+        '1': 'BFS', '2': 'DFS', '3': 'GBFS', '4': 'AS',
+        'BFS': 'BFS', 'DFS': 'DFS', 'GBFS': 'GBFS', 'AS': 'AS'
+    }
 
-    # interactive if no valid method arg
-    while choice not in ['1','2','3','4']:
-        choice = input("\nEnter the number of your chosen search algorithm (1-4): ").strip()
-        if choice in ['1','2','3','4']:
-            break
-        print("Invalid choice. Please enter a number between 1 and 4.")
+    choice = method_arg
+    while choice not in method_map:
+        choice = input("\nEnter your choice (1-4): ").strip().upper()
+        if choice not in method_map:
+            print("Invalid choice. Please try again.")
 
-    # Read input file (uses filename variable)
+    # Parse input file and run search
     nodes, edges, origin, destinations = parse_input_file(filename)
+    
+    # Run the selected search method
+    method = method_map[choice]
+    path, nodes_explored, method_name = run_search(method, nodes, edges, origin, destinations, verbose=True)
 
-    # Run selected search algorithm
-    if choice == '1':
-        search_method = "Breadth-First Search"
-        path, nodes_explored = bfs_search(nodes, edges, origin, destinations)
-    elif choice == '2':
-        search_method = "Depth-First Search"
-        path, nodes_explored = dfs_search(nodes, edges, origin, destinations)
-    elif choice == '3':
-        search_method = "Greedy Best-First Search"
-        path, nodes_explored = gbfs_search(nodes, edges, origin, destinations)
-    else:
-        search_method = "A* Search"
-        # enable verbose trace for A* so user sees step-by-step exploration
-        path, nodes_explored = a_star_search(nodes, edges, origin, destinations, verbose=True)
-
+    # Print results
     if path:
-        print(f"\nSearch Method: {search_method}")
+        reached_goal = next(goal for goal in destinations if goal in path)
+        print(f"\nSearch Method: {method_name}")
         print(f"Number of nodes explored: {nodes_explored}")
         path_with_coords = " -> ".join(f"{nid}({nodes[nid].x},{nodes[nid].y})" for nid in path)
         print(f"Path found (id(x,y)): {path_with_coords}")
+        print(f"Destination reached: {reached_goal} ({nodes[reached_goal].x},{nodes[reached_goal].y})")
     else:
         print("\nNo path found!")
 
