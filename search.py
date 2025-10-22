@@ -481,7 +481,7 @@ def main():
 
     choice = method_arg
     while choice not in method_map:
-        choice = input("\nEnter your choice (1-4): ").strip().upper()
+        choice = input("\nEnter your choice (1-6): ").strip().upper()
         if choice not in method_map:
             print("Invalid choice. Please try again.")
 
