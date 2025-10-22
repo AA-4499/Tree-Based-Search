@@ -52,6 +52,49 @@ def parse_input_file(filename):
 def heuristic(node, goal_node):
     return math.sqrt((node.x - goal_node.x)**2 + (node.y - goal_node.y)**2)
 
+def run_search(method, nodes, edges, start_id, goals, verbose=False):
+    """Wrapper function to run the selected search method"""
+    search_methods = {
+        'BFS': ('Breadth-First Search', bfs_search),
+        'DFS': ('Depth-First Search', dfs_search),
+        'GBFS': ('Greedy Best-First Search', gbfs_search),
+        'AS': ('A* Search', a_star_search),
+        'CUS1': ('Custom Uninformed (Cus1)', cus1_search),
+        'CUS2': ('Custom Informed least-moves (Cus2)', cus2_search)
+    }
+    
+    if method not in search_methods:
+        raise ValueError(f"Unknown search method: {method}")
+    
+    method_name, search_func = search_methods[method]
+    
+    if search_func is None:
+        print(f"\n{method_name} is not implemented yet!")
+        return None, 0, method_name, None, None
+    
+    res = search_func(nodes, edges, start_id, goals, verbose)
+    # normalize return values: support legacy (path, nodes_explored) and new (path, nodes_explored, cost, reached_goal)
+    if isinstance(res, tuple):
+        if len(res) == 2:
+            path, nodes_explored = res
+            cost = None
+            reached_goal = None
+        elif len(res) == 4:
+            path, nodes_explored, cost, reached_goal = res
+        else:
+            # fallback
+            path = res[0] if len(res) > 0 else None
+            nodes_explored = res[1] if len(res) > 1 else 0
+            cost = None
+            reached_goal = None
+    else:
+        path = res
+        nodes_explored = 0
+        cost = None
+        reached_goal = None
+    
+    return path, nodes_explored, method_name, cost, reached_goal
+
 def bfs_search(nodes, edges, start_id, goals, verbose=False):
     queue = deque([(start_id, [start_id])])
     visited = set([start_id])
@@ -125,47 +168,6 @@ def dfs_search(nodes, edges, start_id, goals, verbose=False):
     if best_path is None:
         return None, nodes_created, None, None
     return best_path, nodes_created, best_cost, best_goal
-
-def run_search(method, nodes, edges, start_id, goals, verbose=False):
-    """Wrapper function to run the selected search method"""
-    search_methods = {
-        'BFS': ('Breadth-First Search', bfs_search),
-        'DFS': ('Depth-First Search', dfs_search),
-        'GBFS': ('Greedy Best-First Search', gbfs_search),
-        'AS': ('A* Search', a_star_search)
-    }
-    
-    if method not in search_methods:
-        raise ValueError(f"Unknown search method: {method}")
-    
-    method_name, search_func = search_methods[method]
-    
-    if search_func is None:
-        print(f"\n{method_name} is not implemented yet!")
-        return None, 0, method_name, None, None
-    
-    res = search_func(nodes, edges, start_id, goals, verbose)
-    # normalize return values: support legacy (path, nodes_explored) and new (path, nodes_explored, cost, reached_goal)
-    if isinstance(res, tuple):
-        if len(res) == 2:
-            path, nodes_explored = res
-            cost = None
-            reached_goal = None
-        elif len(res) == 4:
-            path, nodes_explored, cost, reached_goal = res
-        else:
-            # fallback
-            path = res[0] if len(res) > 0 else None
-            nodes_explored = res[1] if len(res) > 1 else 0
-            cost = None
-            reached_goal = None
-    else:
-        path = res
-        nodes_explored = 0
-        cost = None
-        reached_goal = None
-    
-    return path, nodes_explored, method_name, cost, reached_goal
 
 def gbfs_search(nodes, edges, start_id, goals, verbose=False):
     """
@@ -313,6 +315,112 @@ def a_star_search(nodes, edges, start_id, goals, verbose=False):
 
     return None, nodes_explored
 
+# -----------------------
+# Custom searches: Cus1 (uninformed first-path), Cus2 (informed least-moves)
+# -----------------------
+def cus1_search(nodes, edges, start_id, goals, verbose=False):
+    """
+    Uninformed search that returns the first path found to any goal (DFS-style, not guaranteed optimal).
+    Returns (path, nodes_explored, None, reached_goal) or (None, nodes_explored, None, None).
+    """
+    stack = [(start_id, [start_id])]
+    nodes_explored = 0
+
+    if verbose:
+        print("\nCus1 (Uninformed) Trace:")
+
+    while stack:
+        current_id, path = stack.pop()  # LIFO -> DFS-like
+        nodes_explored += 1
+
+        if verbose:
+            cur = nodes[current_id]
+            print(f"Expand node {current_id} ({cur.x},{cur.y})")
+
+        if current_id in goals:
+            return path, nodes_explored, None, current_id
+
+        # push neighbors in reverse-sorted order so smallest id is expanded first when popped
+        for neighbor_id, _ in sorted(edges.get(current_id, {}).items(), key=lambda x: x[0], reverse=True):
+            if neighbor_id not in path:  # avoid cycles by checking path
+                stack.append((neighbor_id, path + [neighbor_id]))
+
+    return None, nodes_explored, None, None
+
+def cus2_search(nodes, edges, start_id, goals, verbose=False):
+    """
+    Informed search to find a path with the least moves (each edge counts as 1 move).
+    Uses A* where g = number of moves and heuristic = Euclidean distance to nearest goal.
+    Returns (path, nodes_explored, moves, reached_goal) or (None, nodes_explored, None, None).
+    """
+    # reset node fields
+    for n in nodes.values():
+        n.g = float('inf')
+        n.h = 0
+        n.f = float('inf')
+        n.parent = None
+
+    start = nodes[start_id]
+    start.g = 0
+    start.h = min(heuristic(start, nodes[g]) for g in goals)
+    start.f = start.g + start.h
+
+    counter = 0
+    open_set = [(start.f, counter, start_id)]
+    counter += 1
+    closed = set()
+    nodes_explored = 0
+
+    if verbose:
+        print("\nCus2 (Informed least-moves) Trace:")
+        print(f"Start node: {start_id} g={start.g:.2f} h={start.h:.2f} f={start.f:.2f}")
+
+    while open_set:
+        _, _, current_id = heapq.heappop(open_set)
+        current = nodes[current_id]
+
+        if current_id in closed:
+            continue
+
+        nodes_explored += 1
+
+        if verbose:
+            print(f"\nExpand node {current_id}: moves={current.g:.0f} h={current.h:.2f} f={current.f:.2f} (expanded count={nodes_explored})")
+
+        if current_id in goals:
+            # reconstruct path
+            path = []
+            walker = current
+            while walker:
+                path.append(walker.id)
+                walker = walker.parent
+            return path[::-1], nodes_explored, int(current.g), current_id
+
+        closed.add(current_id)
+
+        for neighbor_id, _ in sorted(edges.get(current_id, {}).items(), key=lambda x: x[0]):
+            if neighbor_id in closed:
+                continue
+
+            neighbor = nodes[neighbor_id]
+            tentative_g = current.g + 1  # each edge = 1 move
+
+            if tentative_g < neighbor.g:
+                neighbor.parent = current
+                neighbor.g = tentative_g
+                neighbor.h = min(heuristic(neighbor, nodes[g]) for g in goals)
+                neighbor.f = neighbor.g + neighbor.h
+                heapq.heappush(open_set, (neighbor.f, counter, neighbor_id))
+                counter += 1
+                if verbose:
+                    print(f"  Neighbor {neighbor_id}: moves={neighbor.g:.0f} h={neighbor.h:.2f} f={neighbor.f:.2f} pushed to open set")
+
+        if verbose:
+            open_snapshot = ", ".join(f"{nid}(f={f:.2f})" for f,_,nid in open_set)
+            print(f"  Open set: [{open_snapshot}]")
+            print(f"  Closed set: {sorted(list(closed))}")
+
+    return None, nodes_explored, None, None
 
 def print_graph_info(filename):
     """Print the graph information"""
@@ -362,11 +470,13 @@ def main():
     print("2. Depth-First Search (DFS)")
     print("3. Greedy Best-First Search (GBFS)")
     print("4. A* Search (AS)")
+    print("5. Custom Uninformed (Cus1)")
+    print("6. Custom Informed least-moves (Cus2)")
 
     # Get search method choice
     method_map = {
-        '1': 'BFS', '2': 'DFS', '3': 'GBFS', '4': 'AS',
-        'BFS': 'BFS', 'DFS': 'DFS', 'GBFS': 'GBFS', 'AS': 'AS'
+        '1': 'BFS', '2': 'DFS', '3': 'GBFS', '4': 'AS', '5': 'CUS1', '6': 'CUS2',
+        'BFS': 'BFS', 'DFS': 'DFS', 'GBFS': 'GBFS', 'AS': 'AS', 'CUS1': 'CUS1', 'CUS2': 'CUS2'
     }
 
     choice = method_arg
