@@ -157,11 +157,57 @@ def a_star_search(nodes, edges, start_id, goals, verbose=False):
 
     return None, nodes_explored
 
+# -----------------------
+# DFS
+# -----------------------
+def dfs_search(nodes, edges, start_id, goals, verbose=False):
+    """
+    Exhaustive DFS that finds the minimum-cost path to any goal.
+    Tie-breaker: if equal cost, prefer the path ending at the smaller goal id.
+    Returns (path, nodes_explored, cost, reached_goal) where path is list of node ids
+    or None if no path.
+    """
+    best_cost = float('inf')
+    best_path = None
+    best_goal = None
+    nodes_created = 0
+
+    def _dfs(node_id, path, cost, visited):
+        nonlocal best_cost, best_path, best_goal, nodes_created
+        nodes_created += 1
+
+        if node_id in goals:
+            # record if better or tie-breaker by smaller goal id
+            if cost < best_cost or (cost == best_cost and (best_goal is None or node_id < best_goal)):
+                best_cost = cost
+                best_path = path[:]
+                best_goal = node_id
+            return
+
+        # prune branches that already exceed best known cost
+        if cost >= best_cost:
+            return
+
+        # neighbors sorted ascending so expansion order is ascending by node id
+        for nbr_id, weight in sorted(edges.get(node_id, {}).items(), key=lambda x: x[0]):
+            if nbr_id not in visited:
+                visited.add(nbr_id)
+                _dfs(nbr_id, path + [nbr_id], cost + weight, visited)
+                visited.remove(nbr_id)
+
+    # start DFS
+    visited = {start_id}
+    _dfs(start_id, [start_id], 0.0, visited)
+
+    if best_path is None:
+        return None, nodes_created, None, None
+    return best_path, nodes_created, best_cost, best_goal
+
 def run_search(method, nodes, edges, start_id, goals, verbose=False):
     """Wrapper function to run the selected search method"""
     search_methods = {
         'BFS': ('Breadth-First Search', bfs_search),
-        'DFS': ('Depth-First Search', None),  # Placeholder for DFS
+        'DFS': ('Depth-First Search', dfs_search),
         'GBFS': ('Greedy Best-First Search', None),  # Placeholder for GBFS
         'AS': ('A* Search', a_star_search)
     }
@@ -173,11 +219,30 @@ def run_search(method, nodes, edges, start_id, goals, verbose=False):
     
     if search_func is None:
         print(f"\n{method_name} is not implemented yet!")
-        return None, 0
+        return None, 0, method_name, None, None
     
-    path, nodes_explored = search_func(nodes, edges, start_id, goals, verbose)
+    res = search_func(nodes, edges, start_id, goals, verbose)
+    # normalize return values: support legacy (path, nodes_explored) and new (path, nodes_explored, cost, reached_goal)
+    if isinstance(res, tuple):
+        if len(res) == 2:
+            path, nodes_explored = res
+            cost = None
+            reached_goal = None
+        elif len(res) == 4:
+            path, nodes_explored, cost, reached_goal = res
+        else:
+            # fallback
+            path = res[0] if len(res) > 0 else None
+            nodes_explored = res[1] if len(res) > 1 else 0
+            cost = None
+            reached_goal = None
+    else:
+        path = res
+        nodes_explored = 0
+        cost = None
+        reached_goal = None
     
-    return path, nodes_explored, method_name
+    return path, nodes_explored, method_name, cost, reached_goal
 
 def print_graph_info(filename):
     """Print the graph information"""
@@ -245,16 +310,20 @@ def main():
     
     # Run the selected search method
     method = method_map[choice]
-    path, nodes_explored, method_name = run_search(method, nodes, edges, origin, destinations, verbose=True)
+    path, nodes_explored, method_name, found_cost, reached_goal = run_search(method, nodes, edges, origin, destinations, verbose=True)
 
     # Print results
     if path:
-        reached_goal = next(goal for goal in destinations if goal in path)
+        # prefer returned reached_goal if available, otherwise infer from path
+        goal_to_show = reached_goal if reached_goal is not None else next((g for g in destinations if g in path), None)
         print(f"\nSearch Method: {method_name}")
         print(f"Number of nodes explored: {nodes_explored}")
         path_with_coords = " -> ".join(f"{nid}({nodes[nid].x},{nodes[nid].y})" for nid in path)
         print(f"Path found (id(x,y)): {path_with_coords}")
-        print(f"Destination reached: {reached_goal} ({nodes[reached_goal].x},{nodes[reached_goal].y})")
+        if goal_to_show is not None:
+            print(f"Destination reached: {goal_to_show} ({nodes[goal_to_show].x},{nodes[goal_to_show].y})")
+        if found_cost is not None:
+            print(f"Lowest Cost Found: {found_cost}")
     else:
         print("\nNo path found!")
 
