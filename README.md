@@ -71,7 +71,7 @@ A secondary way to run the code (if no arguments are supplied) is:
 
 👥 Group Members
 
-* Andy Wei Jian CHU (104401283)
-* Desmond Khai Tie OH (104389075)
-* Nicholina Sheron Avanthi Pinto JAYANTHI LEKAMGE (104395470)
-* Nur Najiehah BINTI MOHD SHYAFUDDIN LOH (104402312)
+* Andy
+* Desmond
+* Nicholina
+* Najiehah
