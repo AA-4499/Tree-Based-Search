@@ -60,7 +60,7 @@ def run_search(method, nodes, edges, start_id, goals, verbose=False):
         'GBFS': ('Greedy Best-First Search', gbfs_search),
         'AS': ('A* Search', a_star_search),
         'CUS1': ('Custom Uninformed (Cus1)', cus1_search),
-        'CUS2': ('Custom Informed least-moves (Cus2)', cus2_search)
+        'CUS2': ('Weighted A* Search (w=2.0) (Cus2)', cus2_search)
     }
     
     if method not in search_methods:
@@ -316,7 +316,7 @@ def a_star_search(nodes, edges, start_id, goals, verbose=False):
     return None, nodes_explored
 
 # -----------------------
-# Custom searches: Cus1 (uninformed first-path), Cus2 (informed least-moves)
+# Custom searches: Cus1 (uninformed first-path), Cus2 (Weighted A*)
 # -----------------------
 def cus1_search(nodes, edges, start_id, goals, verbose=False):
     """
@@ -349,10 +349,13 @@ def cus1_search(nodes, edges, start_id, goals, verbose=False):
 
 def cus2_search(nodes, edges, start_id, goals, verbose=False):
     """
-    Informed search to find a path with the least moves (each edge counts as 1 move).
-    Uses A* where g = number of moves and heuristic = Euclidean distance to nearest goal.
-    Returns (path, nodes_explored, moves, reached_goal) or (None, nodes_explored, None, None).
+    Weighted A* Search (w=2.0): An informed search that uses f = g + w*h where w > 1.
+    This emphasizes the heuristic more than standard A*, potentially finding solutions
+    faster but not guaranteeing optimal paths. Useful when speed is more important than optimality.
+    Returns (path, nodes_explored, cost, reached_goal) or (None, nodes_explored, None, None).
     """
+    WEIGHT = 2.0  # Weight factor for the heuristic (w > 1 for faster, suboptimal search)
+    
     # reset node fields
     for n in nodes.values():
         n.g = float('inf')
@@ -363,7 +366,7 @@ def cus2_search(nodes, edges, start_id, goals, verbose=False):
     start = nodes[start_id]
     start.g = 0
     start.h = min(heuristic(start, nodes[g]) for g in goals)
-    start.f = start.g + start.h
+    start.f = start.g + WEIGHT * start.h  # Weighted f-value
 
     counter = 0
     open_set = [(start.f, counter, start_id)]
@@ -372,8 +375,8 @@ def cus2_search(nodes, edges, start_id, goals, verbose=False):
     nodes_explored = 0
 
     if verbose:
-        print("\nCus2 (Informed least-moves) Trace:")
-        print(f"Start node: {start_id} g={start.g:.2f} h={start.h:.2f} f={start.f:.2f}")
+        print(f"\nCus2 (Weighted A* with w={WEIGHT}) Trace:")
+        print(f"Start node: {start_id} g={start.g:.2f} h={start.h:.2f} f={start.f:.2f} (f = g + {WEIGHT}*h)")
 
     while open_set:
         _, _, current_id = heapq.heappop(open_set)
@@ -385,7 +388,7 @@ def cus2_search(nodes, edges, start_id, goals, verbose=False):
         nodes_explored += 1
 
         if verbose:
-            print(f"\nExpand node {current_id}: moves={current.g:.0f} h={current.h:.2f} f={current.f:.2f} (expanded count={nodes_explored})")
+            print(f"\nExpand node {current_id}: g={current.g:.2f} h={current.h:.2f} f={current.f:.2f} (expanded count={nodes_explored})")
 
         if current_id in goals:
             # reconstruct path
@@ -394,26 +397,34 @@ def cus2_search(nodes, edges, start_id, goals, verbose=False):
             while walker:
                 path.append(walker.id)
                 walker = walker.parent
-            return path[::-1], nodes_explored, int(current.g), current_id
+            return path[::-1], nodes_explored, current.g, current_id
 
         closed.add(current_id)
 
-        for neighbor_id, _ in sorted(edges.get(current_id, {}).items(), key=lambda x: x[0]):
+        for neighbor_id, weight in sorted(edges.get(current_id, {}).items(), key=lambda x: x[0]):
             if neighbor_id in closed:
+                if verbose:
+                    print(f"  Neighbor {neighbor_id}: skipped (in closed set)")
                 continue
 
             neighbor = nodes[neighbor_id]
-            tentative_g = current.g + 1  # each edge = 1 move
+            tentative_g = current.g + weight
+
+            if verbose:
+                print(f"  Neighbor {neighbor_id}: edge_weight={weight} tentative_g={tentative_g:.2f} (current g={neighbor.g if neighbor.g!=float('inf') else 'inf'})")
 
             if tentative_g < neighbor.g:
                 neighbor.parent = current
                 neighbor.g = tentative_g
                 neighbor.h = min(heuristic(neighbor, nodes[g]) for g in goals)
-                neighbor.f = neighbor.g + neighbor.h
+                neighbor.f = neighbor.g + WEIGHT * neighbor.h  # Weighted f-value
                 heapq.heappush(open_set, (neighbor.f, counter, neighbor_id))
                 counter += 1
                 if verbose:
-                    print(f"  Neighbor {neighbor_id}: moves={neighbor.g:.0f} h={neighbor.h:.2f} f={neighbor.f:.2f} pushed to open set")
+                    print(f"    -> updated: g={neighbor.g:.2f} h={neighbor.h:.2f} f={neighbor.f:.2f} (f = g + {WEIGHT}*h) pushed to open set")
+            else:
+                if verbose:
+                    print("    -> not improved, not pushed")
 
         if verbose:
             open_snapshot = ", ".join(f"{nid}(f={f:.2f})" for f,_,nid in open_set)
@@ -471,7 +482,7 @@ def main():
     print("3. Greedy Best-First Search (GBFS)")
     print("4. A* Search (AS)")
     print("5. Custom Uninformed (Cus1)")
-    print("6. Custom Informed least-moves (Cus2)")
+    print("6. Weighted A* Search w=2.0 (Cus2)")
 
     # Get search method choice
     method_map = {
@@ -503,7 +514,7 @@ def main():
         if goal_to_show is not None:
             print(f"Destination reached: {goal_to_show} ({nodes[goal_to_show].x},{nodes[goal_to_show].y})")
         if found_cost is not None:
-            print(f"Lowest Cost Found: {found_cost}")
+            print(f"Total Cost: {found_cost}")
     else:
         print("\nNo path found!")
 
