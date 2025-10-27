@@ -354,7 +354,7 @@ def cus2_search(nodes, edges, start_id, goals, verbose=False):
     faster but not guaranteeing optimal paths. Useful when speed is more important than optimality.
     Returns (path, nodes_explored, cost, reached_goal) or (None, nodes_explored, None, None).
     """
-    WEIGHT = 2.0  # Weight factor for the heuristic (w > 1 for faster, suboptimal search)
+    WEIGHT = 10.0  # Weight factor for the heuristic (w > 1 for faster, suboptimal search)
     
     # reset node fields
     for n in nodes.values():
