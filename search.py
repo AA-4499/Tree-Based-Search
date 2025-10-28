@@ -2,6 +2,8 @@ from flask import Flask, render_template, jsonify, request
 import math
 import heapq
 from collections import deque
+import sys
+import re
 
 app = Flask(__name__)
 
@@ -34,6 +36,162 @@ def parse_graph_data(data):
         edges[from_id][to_id] = weight
     
     return nodes, edges
+
+def parse_text_file(filepath):
+    """Parses graph data from the project's specific text file format for CLI use."""
+    nodes = {}
+    edges = {}
+    start_id = None
+    goals = []
+    
+    # Use 'r' for read mode
+    try:
+        with open(filepath, 'r') as f:
+            content = f.read()
+    except FileNotFoundError:
+        raise FileNotFoundError(f"Input file '{filepath}' not found.")
+    
+    # 1. Parse Nodes
+    nodes_match = re.search(r'Nodes:\s*([\s\S]*?)Edges:', content, re.IGNORECASE)
+    if nodes_match:
+        nodes_content = nodes_match.group(1).strip()
+        node_lines = [line.strip() for line in nodes_content.split('\n') if line.strip()]
+        for line in node_lines:
+            # e.g., 1: (4,1)
+            try:
+                node_id_str, coords_str = line.split(':', 1)
+                node_id = int(node_id_str.strip())
+                # Finds coordinates (x, y)
+                x, y = map(int, re.findall(r'\((\d+),(\d+)\)', coords_str)[0])
+                nodes[node_id] = Node(node_id, x, y)
+            except (ValueError, IndexError):
+                # Ignore lines that don't match the expected format
+                continue
+            
+    # 2. Parse Edges
+    edges_match = re.search(r'Edges:\s*([\s\S]*?)Origin:', content, re.IGNORECASE)
+    if edges_match:
+        edges_content = edges_match.group(1).strip()
+        edge_lines = [line.strip() for line in edges_content.split('\n') if line.strip()]
+        for line in edge_lines:
+            # e.g., (2,1): 4
+            match = re.search(r'\((\d+),(\d+)\):\s*(\d+)', line)
+            if match:
+                from_id, to_id, weight = map(int, match.groups())
+                if from_id not in edges:
+                    edges[from_id] = {}
+                edges[from_id][to_id] = weight
+                
+    # 3. Parse Origin
+    origin_match = re.search(r'Origin:\s*(\d+)', content, re.IGNORECASE)
+    if origin_match:
+        start_id = int(origin_match.group(1))
+        
+    # 4. Parse Destinations
+    # Match everything after 'Destinations:' until the end of the file.
+    dest_match = re.search(r'Destinations:\s*([\s\S]*)', content, re.IGNORECASE)
+    if dest_match:
+        goals_content = dest_match.group(1).strip()
+        # Robustly extract all digits (node IDs) separated by non-digit characters (like ';', newline, or source tags)
+        goals = [int(g.strip()) for g in re.split(r'\D+', goals_content) if g.strip().isdigit()]
+
+    if not nodes or not edges or start_id is None or not goals:
+        # Check if the missing component is the file itself being almost empty
+        if not content.strip():
+             raise ValueError("Input file is empty.")
+        raise ValueError("Could not parse all required graph components (Nodes, Edges, Origin, Destinations) or some components were empty/missing.")
+
+    return nodes, edges, start_id, goals
+
+def run_cli(file_path, algorithm):
+    """Loads data, executes the search algorithm, and prints the result to CLI."""
+    # ... (function body remains as in previous step, using the modified parse_text_file)
+    try:
+        nodes, edges, start_id, goals = parse_text_file(file_path)
+    except (FileNotFoundError, ValueError) as e:
+        print(f"Error parsing file '{file_path}': {e}")
+        return
+
+    print("=" * 40)
+    print(f"PathFinder AI - {algorithm} Search")
+    print("=" * 40)
+    print(f"Origin: Node {start_id}")
+    print(f"Goals: {goals}")
+    print("-" * 40)
+
+    # Dictionary mapping algorithm names to their functions
+    search_algorithms = {
+        'BFS': bfs_search_steps,
+        'DFS': dfs_search_steps,
+        'GBFS': gbfs_search_steps,
+        'AS': astar_search_steps,
+        'CUS1': cus1_search_steps,
+        'CUS2': cus2_search_steps,
+    }
+
+    if algorithm not in search_algorithms:
+        print(f"Error: Unknown algorithm '{algorithm}'. Available: {', '.join(search_algorithms.keys())}")
+        return
+
+    # Execute the search (we don't need all the steps, just the final result)
+    search_func = search_algorithms[algorithm]
+    result = search_func(nodes, edges, start_id, goals)
+
+    if result['success']:
+        print(f"SUCCESS: Goal reached via node {result['path'][-1]}")
+        print(f"Path: {' -> '.join(map(str, result['path']))}")
+        print(f"Total Cost: {result['cost']:.1f}")
+    else:
+        print("FAILURE: No path found to any destination.")
+    
+    print("=" * 40)
+
+
+def run_cli(file_path, algorithm):
+    """Loads data, executes the search algorithm, and prints the result to CLI."""
+    try:
+        nodes, edges, start_id, goals = parse_text_file(file_path)
+    except FileNotFoundError:
+        print(f"Error: Input file '{file_path}' not found.")
+        return
+    except ValueError as e:
+        print(f"Error parsing file '{file_path}': {e}")
+        return
+
+    print("=" * 40)
+    print(f"PathFinder AI - {algorithm} Search")
+    print("=" * 40)
+    print(f"Origin: Node {start_id}")
+    print(f"Goals: {goals}")
+    print("-" * 40)
+
+    # Dictionary mapping algorithm names to their functions
+    search_algorithms = {
+        'BFS': bfs_search_steps,
+        'DFS': dfs_search_steps,
+        'GBFS': gbfs_search_steps,
+        'AS': astar_search_steps,
+        'CUS1': cus1_search_steps,
+        'CUS2': cus2_search_steps,
+    }
+
+    if algorithm not in search_algorithms:
+        print(f"Error: Unknown algorithm '{algorithm}'. Available: {', '.join(search_algorithms.keys())}")
+        return
+
+    # Execute the search (we don't need all the steps, just the final result)
+    search_func = search_algorithms[algorithm]
+    result = search_func(nodes, edges, start_id, goals)
+
+    if result['success']:
+        print(f"SUCCESS: Goal reached via node {result['path'][-1]}")
+        print(f"Path: {' -> '.join(map(str, result['path']))}")
+        print(f"Total Cost: {result['cost']:.1f}")
+    else:
+        print("FAILURE: No path found to any destination.")
+    
+    print("=" * 40)
+
 
 def heuristic(node, goal_node):
     return math.sqrt((node.x - goal_node.x)**2 + (node.y - goal_node.y)**2)
@@ -306,4 +464,17 @@ def search():
     return jsonify(result)
 
 if __name__ == '__main__':
-    app.run(debug=True, port=5000)
+    # Logic to switch between CLI and Web GUI mode
+    if len(sys.argv) > 1:
+        # CLI mode: Arguments are present.
+        # Format: python search.py <file> [<method>]
+        file_path = sys.argv[1]
+        
+        # Default to 'AS' (A*) if only the file is provided (Option 1 in .bat)
+        # Use the provided method if available (Option 3 in .bat)
+        algorithm = sys.argv[2].upper().replace('*', 'S') if len(sys.argv) == 3 else 'BFS'
+        
+        run_cli(file_path, algorithm)
+    else:
+        # Web GUI mode: No command-line arguments, run the Flask app.
+        app.run(debug=True, port=5000)
