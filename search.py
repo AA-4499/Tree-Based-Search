@@ -1,7 +1,9 @@
+from flask import Flask, render_template, jsonify, request
 import math
 import heapq
-import sys
 from collections import deque
+
+app = Flask(__name__)
 
 class Node:
     def __init__(self, id, x, y):
@@ -13,510 +15,295 @@ class Node:
         self.f = float('inf')
         self.parent = None
 
-def parse_input_file(filename):
+def parse_graph_data(data):
+    """Parse graph data from the frontend"""
     nodes = {}
     edges = {}
-    origin = None
-    destinations = []
     
-    with open(filename, 'r') as file:
-        section = ""
-        for line in file:
-            line = line.strip()
-            if line.startswith("Nodes:"):
-                section = "nodes"
-            elif line.startswith("Edges:"):
-                section = "edges"
-            elif line.startswith("Origin:"):
-                section = "origin"
-            elif line.startswith("Destinations:"):
-                section = "destinations"
-            elif line:
-                if section == "nodes":
-                    node_id, coords = line.split(": ")
-                    x, y = eval(coords)
-                    nodes[int(node_id)] = Node(int(node_id), x, y)
-                elif section == "edges":
-                    edge, weight = line.split(": ")
-                    node1, node2 = eval(edge)
-                    if node1 not in edges:
-                        edges[node1] = {}
-                    edges[node1][node2] = float(weight)
-                elif section == "origin":
-                    origin = int(line)
-                elif section == "destinations":
-                    destinations = [int(x) for x in line.split(';')]
+    for node_data in data['nodes']:
+        node_id = node_data['id']
+        nodes[node_id] = Node(node_id, node_data['x'], node_data['y'])
     
-    return nodes, edges, origin, destinations
+    for edge_data in data['edges']:
+        from_id = edge_data['from']
+        to_id = edge_data['to']
+        weight = edge_data['weight']
+        
+        if from_id not in edges:
+            edges[from_id] = {}
+        edges[from_id][to_id] = weight
+    
+    return nodes, edges
 
 def heuristic(node, goal_node):
     return math.sqrt((node.x - goal_node.x)**2 + (node.y - goal_node.y)**2)
 
-def run_search(method, nodes, edges, start_id, goals, verbose=False):
-    """Wrapper function to run the selected search method"""
-    search_methods = {
-        'BFS': ('Breadth-First Search', bfs_search),
-        'DFS': ('Depth-First Search', dfs_search),
-        'GBFS': ('Greedy Best-First Search', gbfs_search),
-        'AS': ('A* Search', a_star_search),
-        'CUS1': ('Custom Uninformed (Cus1)', cus1_search),
-        'CUS2': ('Weighted A* Search (w=2.0) (Cus2)', cus2_search)
-    }
-    
-    if method not in search_methods:
-        raise ValueError(f"Unknown search method: {method}")
-    
-    method_name, search_func = search_methods[method]
-    
-    if search_func is None:
-        print(f"\n{method_name} is not implemented yet!")
-        return None, 0, method_name, None, None
-    
-    res = search_func(nodes, edges, start_id, goals, verbose)
-    # normalize return values: support legacy (path, nodes_explored) and new (path, nodes_explored, cost, reached_goal)
-    if isinstance(res, tuple):
-        if len(res) == 2:
-            path, nodes_explored = res
-            cost = None
-            reached_goal = None
-        elif len(res) == 4:
-            path, nodes_explored, cost, reached_goal = res
-        else:
-            # fallback
-            path = res[0] if len(res) > 0 else None
-            nodes_explored = res[1] if len(res) > 1 else 0
-            cost = None
-            reached_goal = None
-    else:
-        path = res
-        nodes_explored = 0
-        cost = None
-        reached_goal = None
-    
-    return path, nodes_explored, method_name, cost, reached_goal
-
-def bfs_search(nodes, edges, start_id, goals, verbose=False):
-    queue = deque([(start_id, [start_id])])
+def bfs_search_steps(nodes, edges, start_id, goals):
+    queue = deque([(start_id, [start_id], 0)])
     visited = set([start_id])
-    nodes_explored = 0
+    steps = []
     
-    if verbose:
-        print("\nBFS Expansion Trace:")
+    steps.append({'type': 'start', 'node': start_id, 'message': f'Starting BFS from node {start_id}'})
     
     while queue:
-        current_id, path = queue.popleft()
-        nodes_explored += 1
-        
-        if verbose:
-            current = nodes[current_id]
-            print(f"Expand node {current_id} ({current.x},{current.y})")
+        current_id, path, cost = queue.popleft()
+        steps.append({'type': 'expand', 'node': current_id, 'path': path, 'cost': cost, 'message': f'Expanding node {current_id}'})
         
         if current_id in goals:
-            return path, nodes_explored
+            steps.append({'type': 'goal', 'node': current_id, 'path': path, 'cost': cost, 'message': f'Goal {current_id} reached!'})
+            return {'success': True, 'path': path, 'steps': steps, 'cost': cost}
         
         if current_id in edges:
-            neighbors = [(nid, w) for nid, w in edges[current_id].items()]
-            for neighbor_id, _ in sorted(neighbors, key=lambda x: x[0]):
+            for neighbor_id, weight in sorted(edges[current_id].items(), key=lambda x: x[0]):
                 if neighbor_id not in visited:
                     visited.add(neighbor_id)
-                    queue.append((neighbor_id, path + [neighbor_id]))
+                    new_cost = cost + weight
+                    queue.append((neighbor_id, path + [neighbor_id], new_cost))
+                    steps.append({'type': 'discover', 'node': neighbor_id, 'parent': current_id, 'message': f'Discovered node {neighbor_id}'})
     
-    return None, nodes_explored
+    return {'success': False, 'path': None, 'steps': steps}
 
-# -----------------------
-# DFS
-# -----------------------
-def dfs_search(nodes, edges, start_id, goals, verbose=False):
-    """
-    Exhaustive DFS that finds the minimum-cost path to any goal.
-    Tie-breaker: if equal cost, prefer the path ending at the smaller goal id.
-    Returns (path, nodes_explored, cost, reached_goal) where path is list of node ids
-    or None if no path.
-    """
+def dfs_search_steps(nodes, edges, start_id, goals):
     best_cost = float('inf')
     best_path = None
-    best_goal = None
-    nodes_created = 0
-
+    steps = []
+    
+    steps.append({'type': 'start', 'node': start_id, 'message': f'Starting DFS from node {start_id}'})
+    
     def _dfs(node_id, path, cost, visited):
-        nonlocal best_cost, best_path, best_goal, nodes_created
-        nodes_created += 1
-
+        nonlocal best_cost, best_path
+        steps.append({'type': 'expand', 'node': node_id, 'path': path, 'cost': cost, 'message': f'Exploring node {node_id} (cost: {cost:.1f})'})
+        
         if node_id in goals:
-            # record if better or tie-breaker by smaller goal id
-            if cost < best_cost or (cost == best_cost and (best_goal is None or node_id < best_goal)):
+            if cost < best_cost:
                 best_cost = cost
                 best_path = path[:]
-                best_goal = node_id
+                steps.append({'type': 'goal', 'node': node_id, 'path': path, 'cost': cost, 'message': f'Goal {node_id} found with cost {cost:.1f}'})
             return
-
-        # prune branches that already exceed best known cost
+        
         if cost >= best_cost:
             return
-
-        # neighbors sorted ascending so expansion order is ascending by node id
+        
         for nbr_id, weight in sorted(edges.get(node_id, {}).items(), key=lambda x: x[0]):
             if nbr_id not in visited:
                 visited.add(nbr_id)
                 _dfs(nbr_id, path + [nbr_id], cost + weight, visited)
                 visited.remove(nbr_id)
+    
+    _dfs(start_id, [start_id], 0.0, {start_id})
+    return {'success': best_path is not None, 'path': best_path, 'steps': steps, 'cost': best_cost if best_path else None}
 
-    # start DFS
-    visited = {start_id}
-    _dfs(start_id, [start_id], 0.0, visited)
-
-    if best_path is None:
-        return None, nodes_created, None, None
-    return best_path, nodes_created, best_cost, best_goal
-
-def gbfs_search(nodes, edges, start_id, goals, verbose=False):
-    """
-    Greedy Best-First Search that expands nodes purely by the heuristic distance
-    to the nearest goal. Returns (path, nodes_explored) or (None, nodes_explored)
-    if no goal can be reached.
-    """
-    for node in nodes.values():
-        node.parent = None
-
+def gbfs_search_steps(nodes, edges, start_id, goals):
     def best_heuristic(node_id):
-        current = nodes[node_id]
-        return min(heuristic(current, nodes[goal]) for goal in goals)
-
-    counter = 0
-    open_set = []
-    start_h = best_heuristic(start_id)
-    heapq.heappush(open_set, (start_h, counter, start_id))
-    counter += 1
-
-    explored = set()
+        return min(heuristic(nodes[node_id], nodes[goal]) for goal in goals)
+    
+    open_set = [(best_heuristic(start_id), 0, start_id)]
     parent = {start_id: None}
-    nodes_explored = 0
-
-    if verbose:
-        print("\nGBFS Trace:")
-        print(f"Start node: {start_id} h={start_h:.2f}")
-
+    cost_so_far = {start_id: 0}
+    explored = set()
+    steps = []
+    counter = 1
+    
+    steps.append({'type': 'start', 'node': start_id, 'h': best_heuristic(start_id), 'message': f'Starting GBFS from node {start_id}'})
+    
     while open_set:
         current_h, _, current_id = heapq.heappop(open_set)
         if current_id in explored:
             continue
-
+        
         explored.add(current_id)
-        nodes_explored += 1
-
-        if verbose:
-            print(f"\nExpand node {current_id}: h={current_h:.2f} (expanded count={nodes_explored})")
-
+        path = []
+        temp = current_id
+        while temp is not None:
+            path.append(temp)
+            temp = parent[temp]
+        path = path[::-1]
+        
+        steps.append({'type': 'expand', 'node': current_id, 'path': path, 'h': current_h, 'cost': cost_so_far[current_id], 'message': f'Expanding node {current_id} (h={current_h:.1f})'})
+        
         if current_id in goals:
-            path = []
-            walker = current_id
-            while walker is not None:
-                path.append(walker)
-                walker = parent[walker]
-            return path[::-1], nodes_explored
-
-        for neighbor_id, _ in sorted(edges.get(current_id, {}).items(), key=lambda x: x[0]):
-            if neighbor_id in explored:
-                if verbose:
-                    print(f"  Neighbor {neighbor_id}: skipped (in closed set)")
-                continue
-
-            if neighbor_id not in parent:
-                parent[neighbor_id] = current_id
-
-            neighbor_h = best_heuristic(neighbor_id)
-            # Greedy strategy: always push the neighbor with the lowest heuristic distance first.
-            heapq.heappush(open_set, (neighbor_h, counter, neighbor_id))
-            counter += 1
-
-            if verbose:
-                print(f"  Neighbor {neighbor_id}: h={neighbor_h:.2f} pushed to open set")
-
-        if verbose:
-            open_snapshot = ", ".join(f"{nid}(h={hval:.2f})" for hval, _, nid in open_set)
-            print(f"  Open set: [{open_snapshot}]")
-
-    return None, nodes_explored
-
-def a_star_search(nodes, edges, start_id, goals, verbose=False):
-    # reset node costs (so repeated runs work)
-    for n in nodes.values():
-        n.g = float('inf')
-        n.h = 0
-        n.f = float('inf')
-        n.parent = None
-
-    start_node = nodes[start_id]
-    start_node.g = 0
-    start_node.h = min(heuristic(start_node, nodes[goal]) for goal in goals)
-    start_node.f = start_node.g + start_node.h
-
-    counter = 0
-    open_set = [(start_node.f, counter, start_node.id)]
-    counter += 1
-    closed_set = set()
-    nodes_explored = 0
-
-    if verbose:
-        print("\nA* Trace:")
-        print(f"Start node: {start_id} g={start_node.g:.2f} h={start_node.h:.2f} f={start_node.f:.2f}")
-
-    while open_set:
-        _, _, current_id = heapq.heappop(open_set)
-        current = nodes[current_id]
-        nodes_explored += 1
-
-        if verbose:
-            print(f"\nExpand node {current_id}: g={current.g:.2f} h={current.h:.2f} f={current.f:.2f} (expanded count={nodes_explored})")
-
-        if current_id in goals:
-            # Goal reached
-            if verbose:
-                print(f"Goal {current_id} reached.")
-            path = []
-            while current:
-                path.append(current.id)
-                current = current.parent
-            return path[::-1], nodes_explored
-
-        closed_set.add(current_id)
-
-        # Check neighbors
-        if current_id in edges:
-            for neighbor_id, weight in edges[current_id].items():
-                if neighbor_id in closed_set:
-                    if verbose:
-                        print(f"  Neighbor {neighbor_id}: skipped (in closed set)")
-                    continue
-
-                neighbor = nodes[neighbor_id]
-                tentative_g = current.g + weight
-                if verbose:
-                    print(f"  Neighbor {neighbor_id}: edge_weight={weight} tentative_g={tentative_g:.2f} (current g={neighbor.g if neighbor.g!=float('inf') else 'inf'})")
-
-                if tentative_g < neighbor.g:
-                    neighbor.parent = current
-                    neighbor.g = tentative_g
-                    neighbor.h = min(heuristic(neighbor, nodes[goal]) for goal in goals)
-                    neighbor.f = neighbor.g + neighbor.h
-                    heapq.heappush(open_set, (neighbor.f, counter, neighbor_id))
-                    counter += 1
-                    if verbose:
-                        print(f"    -> updated: g={neighbor.g:.2f} h={neighbor.h:.2f} f={neighbor.f:.2f} pushed to open set")
-                else:
-                    if verbose:
-                        print("    -> not improved, not pushed")
-
-        if verbose:
-            # show simple open set snapshot
-            open_snapshot = ", ".join(f"{nid}(f={f:.2f})" for f,_,nid in open_set)
-            print(f"  Open set: [{open_snapshot}]")
-            print(f"  Closed set: {sorted(list(closed_set))}")
-
-    return None, nodes_explored
-
-# -----------------------
-# Custom searches: Cus1 (uninformed first-path), Cus2 (Weighted A*)
-# -----------------------
-def cus1_search(nodes, edges, start_id, goals, verbose=False):
-    """
-    Uninformed search that returns the first path found to any goal (DFS-style, not guaranteed optimal).
-    Returns (path, nodes_explored, None, reached_goal) or (None, nodes_explored, None, None).
-    """
-    stack = [(start_id, [start_id])]
-    nodes_explored = 0
-
-    if verbose:
-        print("\nCus1 (Uninformed) Trace:")
-
-    while stack:
-        current_id, path = stack.pop()  # LIFO -> DFS-like
-        nodes_explored += 1
-
-        if verbose:
-            cur = nodes[current_id]
-            print(f"Expand node {current_id} ({cur.x},{cur.y})")
-
-        if current_id in goals:
-            return path, nodes_explored, None, current_id
-
-        # push neighbors in reverse-sorted order so smallest id is expanded first when popped
-        for neighbor_id, _ in sorted(edges.get(current_id, {}).items(), key=lambda x: x[0], reverse=True):
-            if neighbor_id not in path:  # avoid cycles by checking path
-                stack.append((neighbor_id, path + [neighbor_id]))
-
-    return None, nodes_explored, None, None
-
-def cus2_search(nodes, edges, start_id, goals, verbose=False):
-    """
-    Weighted A* Search (w=2.0): An informed search that uses f = g + w*h where w > 1.
-    This emphasizes the heuristic more than standard A*, potentially finding solutions
-    faster but not guaranteeing optimal paths. Useful when speed is more important than optimality.
-    Returns (path, nodes_explored, cost, reached_goal) or (None, nodes_explored, None, None).
-    """
-    WEIGHT = 10.0  # Weight factor for the heuristic (w > 1 for faster, suboptimal search)
+            steps.append({'type': 'goal', 'node': current_id, 'path': path, 'cost': cost_so_far[current_id], 'message': f'Goal {current_id} reached!'})
+            return {'success': True, 'path': path, 'steps': steps, 'cost': cost_so_far[current_id]}
+        
+        for neighbor_id, weight in sorted(edges.get(current_id, {}).items(), key=lambda x: x[0]):
+            if neighbor_id not in explored:
+                if neighbor_id not in parent:
+                    parent[neighbor_id] = current_id
+                    cost_so_far[neighbor_id] = cost_so_far[current_id] + weight
+                neighbor_h = best_heuristic(neighbor_id)
+                heapq.heappush(open_set, (neighbor_h, counter, neighbor_id))
+                counter += 1
+                steps.append({'type': 'discover', 'node': neighbor_id, 'h': neighbor_h, 'message': f'Discovered node {neighbor_id} (h={neighbor_h:.1f})'})
     
-    # reset node fields
+    return {'success': False, 'path': None, 'steps': steps}
+
+def astar_search_steps(nodes, edges, start_id, goals):
     for n in nodes.values():
         n.g = float('inf')
-        n.h = 0
-        n.f = float('inf')
         n.parent = None
-
+    
     start = nodes[start_id]
     start.g = 0
-    start.h = min(heuristic(start, nodes[g]) for g in goals)
-    start.f = start.g + WEIGHT * start.h  # Weighted f-value
-
-    counter = 0
-    open_set = [(start.f, counter, start_id)]
-    counter += 1
+    start.h = min(heuristic(start, nodes[goal]) for goal in goals)
+    start.f = start.g + start.h
+    
+    open_set = [(start.f, 0, start_id)]
     closed = set()
-    nodes_explored = 0
-
-    if verbose:
-        print(f"\nCus2 (Weighted A* with w={WEIGHT}) Trace:")
-        print(f"Start node: {start_id} g={start.g:.2f} h={start.h:.2f} f={start.f:.2f} (f = g + {WEIGHT}*h)")
-
+    steps = []
+    counter = 1
+    
+    steps.append({'type': 'start', 'node': start_id, 'g': 0, 'h': start.h, 'f': start.f, 'message': f'Starting A* from node {start_id}'})
+    
     while open_set:
         _, _, current_id = heapq.heappop(open_set)
         current = nodes[current_id]
-
-        if current_id in closed:
-            continue
-
-        nodes_explored += 1
-
-        if verbose:
-            print(f"\nExpand node {current_id}: g={current.g:.2f} h={current.h:.2f} f={current.f:.2f} (expanded count={nodes_explored})")
-
+        
+        path = []
+        temp = current
+        while temp:
+            path.append(temp.id)
+            temp = temp.parent
+        path = path[::-1]
+        
+        steps.append({'type': 'expand', 'node': current_id, 'path': path, 'g': current.g, 'h': current.h, 'f': current.f, 'cost': current.g, 'message': f'Expanding node {current_id} (f={current.f:.1f})'})
+        
         if current_id in goals:
-            # reconstruct path
-            path = []
-            walker = current
-            while walker:
-                path.append(walker.id)
-                walker = walker.parent
-            return path[::-1], nodes_explored, current.g, current_id
-
+            steps.append({'type': 'goal', 'node': current_id, 'path': path, 'cost': current.g, 'message': f'Goal {current_id} reached with cost {current.g:.1f}!'})
+            return {'success': True, 'path': path, 'steps': steps, 'cost': current.g}
+        
         closed.add(current_id)
-
-        for neighbor_id, weight in sorted(edges.get(current_id, {}).items(), key=lambda x: x[0]):
+        
+        for neighbor_id, weight in edges.get(current_id, {}).items():
             if neighbor_id in closed:
-                if verbose:
-                    print(f"  Neighbor {neighbor_id}: skipped (in closed set)")
                 continue
-
+            
             neighbor = nodes[neighbor_id]
             tentative_g = current.g + weight
-
-            if verbose:
-                print(f"  Neighbor {neighbor_id}: edge_weight={weight} tentative_g={tentative_g:.2f} (current g={neighbor.g if neighbor.g!=float('inf') else 'inf'})")
-
+            
             if tentative_g < neighbor.g:
                 neighbor.parent = current
                 neighbor.g = tentative_g
-                neighbor.h = min(heuristic(neighbor, nodes[g]) for g in goals)
-                neighbor.f = neighbor.g + WEIGHT * neighbor.h  # Weighted f-value
+                neighbor.h = min(heuristic(neighbor, nodes[goal]) for goal in goals)
+                neighbor.f = neighbor.g + neighbor.h
                 heapq.heappush(open_set, (neighbor.f, counter, neighbor_id))
                 counter += 1
-                if verbose:
-                    print(f"    -> updated: g={neighbor.g:.2f} h={neighbor.h:.2f} f={neighbor.f:.2f} (f = g + {WEIGHT}*h) pushed to open set")
-            else:
-                if verbose:
-                    print("    -> not improved, not pushed")
-
-        if verbose:
-            open_snapshot = ", ".join(f"{nid}(f={f:.2f})" for f,_,nid in open_set)
-            print(f"  Open set: [{open_snapshot}]")
-            print(f"  Closed set: {sorted(list(closed))}")
-
-    return None, nodes_explored, None, None
-
-def print_graph_info(filename):
-    """Print the graph information"""
-    print(f"\nGraph information (from {filename}):\n")
-    print("Nodes:")
-    print("1: (4,1)")
-    print("2: (2,2)")
-    print("3: (4,4)")
-    print("4: (6,3)")
-    print("5: (5,6)")
-    print("6: (7,5)\n")
-    print("Edges:")
-    print("(2,1): 4")
-    print("(3,1): 5")
-    print("(1,3): 5")
-    print("(2,3): 4")
-    print("(3,2): 5")
-    print("(4,1): 6")
-    print("(1,4): 6")
-    print("(4,3): 5")
-    print("(3,5): 6")
-    print("(5,3): 6")
-    print("(4,5): 7")
-    print("(5,4): 8")
-    print("(6,3): 7")
-    print("(3,6): 7\n")
-    print("Origin:")
-    print("2\n")
-    print("Destinations:")
-    print("5; 4\n")
-
-def main():
-    # Parse command line arguments
-    filename = "PathFinder-test.txt"
-    method_arg = None
-    if len(sys.argv) >= 2:
-        filename = sys.argv[1]
-    if len(sys.argv) >= 3:
-        method_arg = sys.argv[2].strip().upper()
-
-    # Print graph information
-    print_graph_info(filename)
-
-    # Show available search methods
-    print("\nAvailable Search Algorithms:")
-    print("1. Breadth-First Search (BFS)")
-    print("2. Depth-First Search (DFS)")
-    print("3. Greedy Best-First Search (GBFS)")
-    print("4. A* Search (AS)")
-    print("5. Custom Uninformed (Cus1)")
-    print("6. Weighted A* Search w=2.0 (Cus2)")
-
-    # Get search method choice
-    method_map = {
-        '1': 'BFS', '2': 'DFS', '3': 'GBFS', '4': 'AS', '5': 'CUS1', '6': 'CUS2',
-        'BFS': 'BFS', 'DFS': 'DFS', 'GBFS': 'GBFS', 'AS': 'AS', 'CUS1': 'CUS1', 'CUS2': 'CUS2'
-    }
-
-    choice = method_arg
-    while choice not in method_map:
-        choice = input("\nEnter your choice (1-6): ").strip().upper()
-        if choice not in method_map:
-            print("Invalid choice. Please try again.")
-
-    # Parse input file and run search
-    nodes, edges, origin, destinations = parse_input_file(filename)
+                steps.append({'type': 'discover', 'node': neighbor_id, 'g': neighbor.g, 'h': neighbor.h, 'f': neighbor.f, 'message': f'Updated node {neighbor_id} (f={neighbor.f:.1f})'})
     
-    # Run the selected search method
-    method = method_map[choice]
-    path, nodes_explored, method_name, found_cost, reached_goal = run_search(method, nodes, edges, origin, destinations, verbose=True)
+    return {'success': False, 'path': None, 'steps': steps}
 
-    # Print results
-    if path:
-        # prefer returned reached_goal if available, otherwise infer from path
-        goal_to_show = reached_goal if reached_goal is not None else next((g for g in destinations if g in path), None)
-        print(f"\nSearch Method: {method_name}")
-        print(f"Number of nodes explored: {nodes_explored}")
-        path_with_coords = " -> ".join(f"{nid}({nodes[nid].x},{nodes[nid].y})" for nid in path)
-        print(f"Path found (id(x,y)): {path_with_coords}")
-        if goal_to_show is not None:
-            print(f"Destination reached: {goal_to_show} ({nodes[goal_to_show].x},{nodes[goal_to_show].y})")
-        if found_cost is not None:
-            print(f"Total Cost: {found_cost}")
+def cus1_search_steps(nodes, edges, start_id, goals):
+    """CUS1: Uninformed search - returns first path found (DFS-style)"""
+    stack = [(start_id, [start_id], 0)]
+    steps = []
+    
+    steps.append({'type': 'start', 'node': start_id, 'message': f'Starting CUS1 (Uninformed DFS) from node {start_id}'})
+    
+    while stack:
+        current_id, path, cost = stack.pop()
+        steps.append({'type': 'expand', 'node': current_id, 'path': path, 'cost': cost, 'message': f'Exploring node {current_id}'})
+        
+        if current_id in goals:
+            steps.append({'type': 'goal', 'node': current_id, 'path': path, 'cost': cost, 'message': f'Goal {current_id} reached!'})
+            return {'success': True, 'path': path, 'steps': steps, 'cost': cost}
+        
+        for neighbor_id, weight in sorted(edges.get(current_id, {}).items(), key=lambda x: x[0], reverse=True):
+            if neighbor_id not in path:
+                new_cost = cost + weight
+                stack.append((neighbor_id, path + [neighbor_id], new_cost))
+                steps.append({'type': 'discover', 'node': neighbor_id, 'message': f'Discovered node {neighbor_id}'})
+    
+    return {'success': False, 'path': None, 'steps': steps}
+
+def cus2_search_steps(nodes, edges, start_id, goals):
+    """CUS2: Weighted A* Search (w=10.0) - emphasizes heuristic for faster search"""
+    WEIGHT = 10.0
+    
+    for n in nodes.values():
+        n.g = float('inf')
+        n.parent = None
+    
+    start = nodes[start_id]
+    start.g = 0
+    start.h = min(heuristic(start, nodes[goal]) for goal in goals)
+    start.f = start.g + WEIGHT * start.h
+    
+    open_set = [(start.f, 0, start_id)]
+    closed = set()
+    steps = []
+    counter = 1
+    
+    steps.append({'type': 'start', 'node': start_id, 'g': 0, 'h': start.h, 'f': start.f, 'message': f'Starting CUS2 (Weighted A* w={WEIGHT}) from node {start_id}'})
+    
+    while open_set:
+        _, _, current_id = heapq.heappop(open_set)
+        current = nodes[current_id]
+        
+        if current_id in closed:
+            continue
+        
+        path = []
+        temp = current
+        while temp:
+            path.append(temp.id)
+            temp = temp.parent
+        path = path[::-1]
+        
+        steps.append({'type': 'expand', 'node': current_id, 'path': path, 'g': current.g, 'h': current.h, 'f': current.f, 'cost': current.g, 'message': f'Expanding node {current_id} (f={current.f:.1f})'})
+        
+        if current_id in goals:
+            steps.append({'type': 'goal', 'node': current_id, 'path': path, 'cost': current.g, 'message': f'Goal {current_id} reached with cost {current.g:.1f}!'})
+            return {'success': True, 'path': path, 'steps': steps, 'cost': current.g}
+        
+        closed.add(current_id)
+        
+        for neighbor_id, weight in sorted(edges.get(current_id, {}).items(), key=lambda x: x[0]):
+            if neighbor_id in closed:
+                continue
+            
+            neighbor = nodes[neighbor_id]
+            tentative_g = current.g + weight
+            
+            if tentative_g < neighbor.g:
+                neighbor.parent = current
+                neighbor.g = tentative_g
+                neighbor.h = min(heuristic(neighbor, nodes[goal]) for goal in goals)
+                neighbor.f = neighbor.g + WEIGHT * neighbor.h
+                heapq.heappush(open_set, (neighbor.f, counter, neighbor_id))
+                counter += 1
+                steps.append({'type': 'discover', 'node': neighbor_id, 'g': neighbor.g, 'h': neighbor.h, 'f': neighbor.f, 'message': f'Updated node {neighbor_id} (f={neighbor.f:.1f})'})
+    
+    return {'success': False, 'path': None, 'steps': steps}
+
+@app.route('/')
+def index():
+    return render_template('index.html')
+
+@app.route('/search', methods=['POST'])
+def search():
+    data = request.json
+    algorithm = data['algorithm']
+    graph_data = data['graph']
+    start_id = data['start']
+    goals = data['goals']
+    
+    nodes, edges = parse_graph_data(graph_data)
+    
+    if algorithm == 'BFS':
+        result = bfs_search_steps(nodes, edges, start_id, goals)
+    elif algorithm == 'DFS':
+        result = dfs_search_steps(nodes, edges, start_id, goals)
+    elif algorithm == 'GBFS':
+        result = gbfs_search_steps(nodes, edges, start_id, goals)
+    elif algorithm == 'AS':
+        result = astar_search_steps(nodes, edges, start_id, goals)
+    elif algorithm == 'CUS1':
+        result = cus1_search_steps(nodes, edges, start_id, goals)
+    elif algorithm == 'CUS2':
+        result = cus2_search_steps(nodes, edges, start_id, goals)
     else:
-        print("\nNo path found!")
+        return jsonify({'error': 'Unknown algorithm'}), 400
+    
+    return jsonify(result)
 
-if __name__ == "__main__":
-    main()
+if __name__ == '__main__':
+    app.run(debug=True, port=5000)
