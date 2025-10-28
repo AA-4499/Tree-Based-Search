@@ -31,14 +31,32 @@ goto MENU
 :CLI
 cls
 echo ================================================
-echo        Running Command Line Interface
+echo          Command Line Interface (CLI)
 echo ================================================
 echo.
-python search.py PathFinder-test.txt
+echo Format: python ^<file_name^> ^<method^>
+echo Current file name: PathFinder-test.txt
+echo Available Methods: BFS, DFS, GBFS, A*, CUS1, CUS2
+echo.
+set /p cmd="Enter command: python search.py PathFinder-test.txt "
+
+if "%cmd%"=="" (
+    echo Invalid input! Please enter a method name.
+    pause
+    goto CLI
+)
+
+cls
+echo ================================================
+echo Running Command: python search.py PathFinder-test.txt %cmd%
+echo ================================================
+echo.
+python search.py PathFinder-test.txt %cmd%
 echo.
 echo ================================================
 pause
 goto MENU
+
 
 :WEBGUI
 cls
@@ -57,7 +75,8 @@ if errorlevel 1 (
     goto MENU
 )
 
-echo Flask found! Starting server...
+echo Flask found!
+echo Starting server...
 echo.
 echo ================================================
 echo  Web GUI will open at: http://localhost:5000
@@ -65,7 +84,7 @@ echo  Press Ctrl+C to stop the server
 echo ================================================
 echo.
 start http://localhost:5000
-python app.py
+python search.py
 goto MENU
 
 :CLI_ALGO
@@ -125,7 +144,6 @@ if errorlevel 1 (
     echo [OK] Python is installed
 )
 echo.
-
 echo Checking Flask...
 python -c "import flask; print('Flask version:', flask.__version__)" 2>nul
 if errorlevel 1 (
@@ -134,7 +152,6 @@ if errorlevel 1 (
     echo [OK] Flask is installed
 )
 echo.
-
 echo Checking required files...
 if exist "search.py" (
     echo [OK] search.py found
@@ -207,13 +224,14 @@ echo   CUS2 - Weighted A* (Fast, suboptimal)
 echo.
 echo USAGE:
 echo   CLI Mode:  python search.py [file] [algorithm]
-echo   Web Mode:  python app.py (then open browser)
+echo   Web Mode:  python search.py (launches server for Web GUI)
 echo.
 echo INPUT FILE FORMAT:
 echo   Nodes: id: (x,y)
 echo   Edges: (from,to): weight
 echo   Origin: node_id
-echo   Destinations: id1; id2; ...
+echo   Destinations: id1;
+id2; ...
 echo.
 echo REQUIREMENTS:
 echo   - Python 3.x
