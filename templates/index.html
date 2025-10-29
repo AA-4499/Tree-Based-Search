@@ -103,7 +103,7 @@
         .stat-item { margin: 10px 0; }
         .stat-label { font-size: 0.9em; opacity: 0.9; }
         .stat-value { font-size: 1.8em; font-weight: bold; margin-top: 5px; }
-        #finalPathNodes { font-size: 1.2em; font-weight: 600; line-height: 1.4; word-break: break-word; }
+        #finalPathNodes { font-size: 1em; font-weight: 600; line-height: 1.6; word-break: break-word; }
         .canvas-container {
             flex: 1;
             background: white;
@@ -196,7 +196,7 @@
             <div class="sidebar">
                 <div class="control-section">
                     <h3>🎯 Select Algorithm</h3>
-                    <button class="algorithm-btn" data-algo="BFS">BFS - Breadth First</button>
+                    <button class="algorithm-btn active" data-algo="BFS">BFS - Breadth First</button>
                     <button class="algorithm-btn" data-algo="DFS">DFS - Depth First</button>
                     <button class="algorithm-btn" data-algo="GBFS">GBFS - Greedy Best First</button>
                     <button class="algorithm-btn" data-algo="AS">A* - A Star</button>
@@ -270,7 +270,7 @@
         if (!Array.isArray(goals)) {
             goals = [];
         }
-        let selectedAlgorithm = 'AS';
+        let selectedAlgorithm = 'BFS';
         let searchSteps = [];
         let currentStep = 0;
         let isPlaying = false;
@@ -279,6 +279,23 @@
         let finalPath = null;
         let animationTimer = null;
         let messageCount = 0;
+        
+        // Helper function to get node coordinates
+        function getNodeCoords(nodeId) {
+            const node = graph.nodes.find(n => n.id === nodeId);
+            return node ? `(${node.x},${node.y})` : '';
+        }
+        
+        // Helper function to format path with coordinates
+        function formatPathWithCoords(path) {
+            if (!path || !Array.isArray(path) || path.length === 0) {
+                return '-';
+            }
+            return path.map(nodeId => {
+                const coords = getNodeCoords(nodeId);
+                return `${nodeId}${coords}`;
+            }).join(' → ');
+        }
         
         function addToMessageLog(message, type = 'info') {
             const logDiv = document.getElementById('messageLog');
@@ -420,11 +437,7 @@
             if (!el) {
                 return;
             }
-            if (!path || !Array.isArray(path) || path.length === 0) {
-                el.textContent = '-';
-            } else {
-                el.textContent = path.join(' -> ');
-            }
+            el.innerHTML = formatPathWithCoords(path);
         }
         
         async function runSearch() {
