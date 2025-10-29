@@ -103,6 +103,7 @@
         .stat-item { margin: 10px 0; }
         .stat-label { font-size: 0.9em; opacity: 0.9; }
         .stat-value { font-size: 1.8em; font-weight: bold; margin-top: 5px; }
+        #finalPathNodes { font-size: 1.2em; font-weight: 600; line-height: 1.4; word-break: break-word; }
         .canvas-container {
             flex: 1;
             background: white;
@@ -222,6 +223,10 @@
                         <div class="stat-label">Path Cost</div>
                         <div class="stat-value" id="pathCost">-</div>
                     </div>
+                    <div class="stat-item">
+                        <div class="stat-label">Final Path</div>
+                        <div class="stat-value" id="finalPathNodes">-</div>
+                    </div>
                 </div>
                 <div class="legend">
                     <div class="legend-item"><div class="legend-color" style="background: #4CAF50;"></div><span>Origin</span></div>
@@ -248,22 +253,23 @@
         const canvas = document.getElementById('canvas');
         const ctx = canvas.getContext('2d');
         
-        const graph = {
-            nodes: [
-                {id: 1, x: 4, y: 1}, {id: 2, x: 2, y: 2}, {id: 3, x: 4, y: 4},
-                {id: 4, x: 6, y: 3}, {id: 5, x: 5, y: 6}, {id: 6, x: 7, y: 5}
-            ],
-            edges: [
-                {from: 2, to: 1, weight: 4}, {from: 3, to: 1, weight: 5}, {from: 1, to: 3, weight: 5},
-                {from: 2, to: 3, weight: 4}, {from: 3, to: 2, weight: 5}, {from: 4, to: 1, weight: 6},
-                {from: 1, to: 4, weight: 6}, {from: 4, to: 3, weight: 5}, {from: 3, to: 5, weight: 6},
-                {from: 5, to: 3, weight: 6}, {from: 4, to: 5, weight: 7}, {from: 5, to: 4, weight: 8},
-                {from: 6, to: 3, weight: 7}, {from: 3, to: 6, weight: 7}
-            ]
-        };
+        const graph = {{ graph_data | tojson }};
+        let origin = {{ start_id | tojson }};
+        let goals = {{ goals | tojson }};
         
-        const origin = 2;
-        const goals = [5, 4];
+        if (!graph || !Array.isArray(graph.nodes)) {
+            console.warn('Graph data is unavailable or malformed.');
+            graph.nodes = [];
+        }
+        if (!graph.edges || !Array.isArray(graph.edges)) {
+            graph.edges = [];
+        }
+        if (origin === null && graph.nodes.length > 0) {
+            origin = graph.nodes[0].id;
+        }
+        if (!Array.isArray(goals)) {
+            goals = [];
+        }
         let selectedAlgorithm = 'AS';
         let searchSteps = [];
         let currentStep = 0;
@@ -409,6 +415,18 @@
             addToMessageLog(message, type);
         }
         
+        function displayFinalPath(path) {
+            const el = document.getElementById('finalPathNodes');
+            if (!el) {
+                return;
+            }
+            if (!path || !Array.isArray(path) || path.length === 0) {
+                el.textContent = '-';
+            } else {
+                el.textContent = path.join(' -> ');
+            }
+        }
+        
         async function runSearch() {
             if (isPlaying) return;
             
@@ -418,6 +436,7 @@
             document.getElementById('pathCost').textContent = '-';
             nodeStates = {};
             finalPath = null;
+            displayFinalPath(null);
             drawGraph();
             
             try {
@@ -436,6 +455,7 @@
                 searchSteps = result.steps;
                 currentStep = 0;
                 finalPath = null;
+                displayFinalPath(null);
                 
                 if (result.success) {
                     updateStatus(`Ready to animate ${selectedAlgorithm}`, 'success');
@@ -457,7 +477,8 @@
                     const lastStep = searchSteps[searchSteps.length - 1];
                     if (lastStep.type === 'goal' && lastStep.path) {
                         finalPath = lastStep.path;
-                        if (lastStep.cost !== undefined) {
+                        displayFinalPath(finalPath);
+                        if (typeof lastStep.cost === 'number') {
                             document.getElementById('pathCost').textContent = lastStep.cost.toFixed(1);
                         }
                         updateStatus('Search complete! Path found.', 'success');
@@ -481,6 +502,13 @@
             } else if (step.type === 'start') {
                 addToMessageLog(step.message, 'start');
             } else if (step.type === 'goal') {
+                if (Array.isArray(step.path)) {
+                    finalPath = step.path.slice();
+                    displayFinalPath(finalPath);
+                }
+                if (typeof step.cost === 'number') {
+                    document.getElementById('pathCost').textContent = step.cost.toFixed(1);
+                }
                 addToMessageLog(step.message, 'goal');
             } else {
                 addToMessageLog(step.message);
@@ -512,6 +540,13 @@
             } else if (step.type === 'start') {
                 addToMessageLog(step.message, 'start');
             } else if (step.type === 'goal') {
+                if (Array.isArray(step.path)) {
+                    finalPath = step.path.slice();
+                    displayFinalPath(finalPath);
+                }
+                if (typeof step.cost === 'number') {
+                    document.getElementById('pathCost').textContent = step.cost.toFixed(1);
+                }
                 addToMessageLog(step.message, 'goal');
             } else {
                 addToMessageLog(step.message);
@@ -525,7 +560,8 @@
                 const lastStep = searchSteps[searchSteps.length - 1];
                 if (lastStep.type === 'goal' && lastStep.path) {
                     finalPath = lastStep.path;
-                    if (lastStep.cost !== undefined) {
+                    displayFinalPath(finalPath);
+                    if (typeof lastStep.cost === 'number') {
                         document.getElementById('pathCost').textContent = lastStep.cost.toFixed(1);
                     }
                     updateStatus('Search complete! Path found.', 'success');
@@ -547,6 +583,7 @@
             currentStep = 0;
             nodeStates = {};
             finalPath = null;
+            displayFinalPath(null);
             document.getElementById('nodesExplored').textContent = '0';
             document.getElementById('pathCost').textContent = '-';
             clearMessageLog();
@@ -577,6 +614,7 @@
         
         // Initial draw
         drawGraph();
+        displayFinalPath(null);
     </script>
 </body>
 </html>
