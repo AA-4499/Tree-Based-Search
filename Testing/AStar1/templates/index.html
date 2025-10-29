@@ -1,0 +1,736 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PathFinder - AI Route Visualizer</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+        .container {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            max-width: 1400px;
+            width: 100%;
+            overflow: hidden;
+        }
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.2);
+        }
+        .content { display: flex; gap: 20px; padding: 20px; }
+        .sidebar {
+            flex: 0 0 320px;
+            background: #f8f9fa;
+            border-radius: 15px;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+        .control-section {
+            background: white;
+            border-radius: 10px;
+            padding: 15px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+        .control-section h3 { color: #667eea; margin-bottom: 15px; font-size: 1.1em; }
+        .algorithm-btn {
+            width: 100%;
+            padding: 12px;
+            margin: 5px 0;
+            border: 2px solid #667eea;
+            background: white;
+            color: #667eea;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1em;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+        .algorithm-btn:hover {
+            background: #667eea;
+            color: white;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        }
+        .algorithm-btn.active { background: #667eea; color: white; }
+        .action-btn {
+            width: 100%;
+            padding: 15px;
+            margin: 5px 0;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1em;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4); }
+        .btn-secondary { background: #6c757d; color: white; }
+        .btn-secondary:hover { background: #5a6268; }
+        .btn-danger { background: #dc3545; color: white; }
+        .btn-danger:hover { background: #c82333; }
+        .speed-control { margin: 10px 0; }
+        .speed-control input[type="range"] { width: 100%; margin: 10px 0; }
+        .input-group {
+            margin: 10px 0;
+        }
+        .input-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 600;
+            color: #333;
+        }
+        .input-group input, .input-group select {
+            width: 100%;
+            padding: 8px;
+            border: 2px solid #e0e0e0;
+            border-radius: 5px;
+            font-size: 0.9em;
+        }
+        .input-group input:focus, .input-group select:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        .stats {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            color: white;
+            padding: 15px;
+            border-radius: 10px;
+            text-align: center;
+        }
+        .stat-item { margin: 10px 0; }
+        .stat-label { font-size: 0.9em; opacity: 0.9; }
+        .stat-value { font-size: 1.8em; font-weight: bold; margin-top: 5px; }
+        #finalPathNodes { font-size: 1em; font-weight: 600; line-height: 1.6; word-break: break-word; }
+        .canvas-container {
+            flex: 1;
+            background: white;
+            border-radius: 15px;
+            padding: 20px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            display: flex;
+            flex-direction: column;
+        }
+        #canvas {
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            background: #fafafa;
+        }
+        .legend {
+            display: flex;
+            justify-content: space-around;
+            margin-top: 15px;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        .legend-item { display: flex; align-items: center; gap: 8px; font-size: 0.9em; }
+        .legend-color { width: 20px; height: 20px; border-radius: 50%; border: 2px solid #333; }
+        .status-message {
+            background: #17a2b8;
+            color: white;
+            padding: 15px;
+            border-radius: 10px;
+            margin-top: 10px;
+            text-align: center;
+            font-weight: 600;
+        }
+        .status-message.success { background: #28a745; }
+        .status-message.error { background: #dc3545; }
+        .message-history {
+            margin-top: 15px;
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 15px;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        .message-history h4 {
+            color: #667eea;
+            margin-bottom: 10px;
+            font-size: 1em;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .clear-log-btn {
+            background: #dc3545;
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 0.8em;
+        }
+        .clear-log-btn:hover {
+            background: #c82333;
+        }
+        .history-item {
+            background: white;
+            padding: 8px 12px;
+            margin: 5px 0;
+            border-radius: 5px;
+            border-left: 4px solid #667eea;
+            font-size: 0.9em;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        }
+        .history-item.expand { border-left-color: #9C27B0; }
+        .history-item.discover { border-left-color: #FFC107; }
+        .history-item.goal { border-left-color: #28a745; }
+        .history-item.start { border-left-color: #4CAF50; }
+        .history-timestamp {
+            color: #999;
+            font-size: 0.8em;
+            margin-right: 8px;
+        }
+        .help-text {
+            font-size: 0.85em;
+            color: #666;
+            margin-top: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🗺️ PathFinder AI</h1>
+            <p>Interactive Route Finding Algorithm Visualizer</p>
+        </div>
+        <div class="content">
+            <div class="sidebar">
+                <div class="control-section">
+                    <h3>🎯 Select Algorithm</h3>
+                    <button class="algorithm-btn active" data-algo="BFS">BFS - Breadth First</button>
+                    <button class="algorithm-btn" data-algo="DFS">DFS - Depth First</button>
+                    <button class="algorithm-btn" data-algo="GBFS">GBFS - Greedy Best First</button>
+                    <button class="algorithm-btn" data-algo="AS">A* - A Star</button>
+                    <button class="algorithm-btn" data-algo="CUS1">CUS1 - Custom Uninformed</button>
+                    <button class="algorithm-btn" data-algo="CUS2">CUS2 - Weighted A* (w=10)</button>
+                </div>
+                
+                <div class="control-section">
+                <h3>📍 Configure Graph</h3>
+                <div class="input-group">
+                        <label for="originSelect">Origin Node:</label>
+                        <select id="originSelect"></select>
+                    </div>
+                    <div class="input-group">
+                        <label for="goalsInput">Goal Nodes:</label>
+                        <input type="text" id="goalsInput" placeholder="e.g., 5, 4">
+                        <div class="help-text">Separate multiple goals with commas</div>
+                    </div>
+                   <button class="action-btn btn-secondary" id="updateGraphBtn">Update Graph</button>
+                </div>
+                
+                <div class="control-section">
+                    <h3>⚡ Controls</h3>
+                    <button class="action-btn btn-primary" id="runBtn">▶️ Run Search</button>
+                    <button class="action-btn btn-secondary" id="stepBtn">⏭️ Step Forward</button>
+                    <button class="action-btn btn-secondary" id="pauseBtn">⏸️ Pause</button>
+                    <button class="action-btn btn-danger" id="resetBtn">🔄 Reset</button>
+                    <div class="speed-control">
+                        <label>Animation Speed: <span id="speedValue">300</span>ms</label>
+                        <input type="range" id="speedSlider" min="50" max="1000" value="300" step="50">
+                    </div>
+                </div>
+                
+                <div class="stats">
+                    <div class="stat-item">
+                        <div class="stat-label">Nodes Explored</div>
+                        <div class="stat-value" id="nodesExplored">0</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-label">Path Cost</div>
+                        <div class="stat-value" id="pathCost">-</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-label">Final Path</div>
+                        <div class="stat-value" id="finalPathNodes">-</div>
+                    </div>
+                </div>
+                
+                <div class="legend">
+                    <div class="legend-item"><div class="legend-color" style="background: #4CAF50;"></div><span>Origin</span></div>
+                    <div class="legend-item"><div class="legend-color" style="background: #F44336;"></div><span>Goal</span></div>
+                    <div class="legend-item"><div class="legend-color" style="background: #FFC107;"></div><span>Exploring</span></div>
+                    <div class="legend-item"><div class="legend-color" style="background: #9C27B0;"></div><span>Explored</span></div>
+                    <div class="legend-item"><div class="legend-color" style="background: #2196F3;"></div><span>Path</span></div>
+                </div>
+            </div>
+            
+            <div class="canvas-container">
+                <canvas id="canvas" width="900" height="600"></canvas>
+                <div class="status-message" id="statusMessage">Select an algorithm and click "Run Search" to begin</div>
+                <div class="message-history">
+                    <h4>
+                        Message History
+                        <button class="clear-log-btn" id="clearLogBtn">Clear Log</button>
+                    </h4>
+                    <div id="messageLog"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        
+        const graph = {{ graph_data | tojson }};
+        let origin = {{ start_id | tojson }};
+        let goals = {{ goals | tojson }};
+        
+        if (!graph || !Array.isArray(graph.nodes)) {
+            console.warn('Graph data is unavailable or malformed.');
+            graph.nodes = [];
+        }
+        if (!graph.edges || !Array.isArray(graph.edges)) {
+            graph.edges = [];
+        }
+        if (origin === null && graph.nodes.length > 0) {
+            origin = graph.nodes[0].id;
+        }
+        if (!Array.isArray(goals)) {
+            goals = [];
+        }
+        
+        let selectedAlgorithm = 'BFS';
+        let searchSteps = [];
+        let currentStep = 0;
+        let isPlaying = false;
+        let animationSpeed = 300;
+        let nodeStates = {};
+        let finalPath = null;
+        let animationTimer = null;
+        let messageCount = 0;
+        
+        // Initialize dropdowns
+        function initializeControls() {
+            const originSelect = document.getElementById('originSelect');
+            const goalsInput = document.getElementById('goalsInput');
+            
+            // Populate origin dropdown
+            originSelect.innerHTML = '';
+            graph.nodes.forEach(node => {
+                const option = document.createElement('option');
+                option.value = node.id;
+                option.textContent = `Node ${node.id} (${node.x},${node.y})`;
+                if (node.id === origin) {
+                    option.selected = true;
+                }
+                originSelect.appendChild(option);
+            });
+            
+            // Set goals input
+            goalsInput.value = goals.join(', ');
+        }
+        
+        // Update graph configuration
+        function updateGraphConfig() {
+            const originSelect = document.getElementById('originSelect');
+            const goalsInput = document.getElementById('goalsInput');
+            
+            origin = parseInt(originSelect.value);
+            
+            // Parse goals input
+            const goalsText = goalsInput.value.trim();
+            if (goalsText) {
+                goals = goalsText.split(',').map(g => parseInt(g.trim())).filter(g => !isNaN(g));
+            } else {
+                goals = [];
+            }
+            
+            // Validate goals exist in graph
+            const validGoals = goals.filter(g => graph.nodes.some(n => n.id === g));
+            if (validGoals.length !== goals.length) {
+                updateStatus('Warning: Some goal nodes do not exist in the graph', 'error');
+                goals = validGoals;
+                goalsInput.value = goals.join(', ');
+            }
+            
+            resetVisualization();
+            updateStatus(`Graph updated: Origin=${origin}, Goals=[${goals.join(', ')}]`, 'success');
+        }
+        
+        // Helper function to get node coordinates
+        function getNodeCoords(nodeId) {
+            const node = graph.nodes.find(n => n.id === nodeId);
+            return node ? `(${node.x},${node.y})` : '';
+        }
+        
+        // Helper function to format path with coordinates
+        function formatPathWithCoords(path) {
+            if (!path || !Array.isArray(path) || path.length === 0) {
+                return '-';
+            }
+            return path.map(nodeId => {
+                const coords = getNodeCoords(nodeId);
+                return `${nodeId}${coords}`;
+            }).join(' → ');
+        }
+        
+        function addToMessageLog(message, type = 'info') {
+            const logDiv = document.getElementById('messageLog');
+            const timestamp = new Date().toLocaleTimeString();
+            const messageEl = document.createElement('div');
+            messageEl.className = `history-item ${type}`;
+            messageEl.innerHTML = `<span class="history-timestamp">[${timestamp}]</span>${message}`;
+            
+            logDiv.appendChild(messageEl);
+            messageCount++;
+            
+            // Auto-scroll to bottom
+            logDiv.scrollTop = logDiv.scrollHeight;
+        }
+        
+        function clearMessageLog() {
+            document.getElementById('messageLog').innerHTML = '';
+            messageCount = 0;
+        }
+        
+        function scaleCoords(x, y) {
+            const padding = 80;
+            const scaleX = (canvas.width - 2 * padding) / 7;
+            const scaleY = (canvas.height - 2 * padding) / 7;
+            return { 
+                x: padding + x * scaleX, 
+                y: canvas.height - (padding + y * scaleY) 
+            };
+        }
+        
+        function drawGraph() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // Draw edges first
+            ctx.strokeStyle = '#ddd';
+            ctx.lineWidth = 3;
+            
+            graph.edges.forEach(edge => {
+                const from = graph.nodes.find(n => n.id === edge.from);
+                const to = graph.nodes.find(n => n.id === edge.to);
+                const fromPos = scaleCoords(from.x, from.y);
+                const toPos = scaleCoords(to.x, to.y);
+                
+                // Draw edge line
+                ctx.beginPath();
+                ctx.moveTo(fromPos.x, fromPos.y);
+                ctx.lineTo(toPos.x, toPos.y);
+                ctx.stroke();
+                
+                // Draw arrow
+                const angle = Math.atan2(toPos.y - fromPos.y, toPos.x - fromPos.x);
+                const arrowLen = 15;
+                const arrowX = toPos.x - Math.cos(angle) * 35;
+                const arrowY = toPos.y - Math.sin(angle) * 35;
+                
+                ctx.beginPath();
+                ctx.moveTo(arrowX, arrowY);
+                ctx.lineTo(
+                    arrowX - arrowLen * Math.cos(angle - Math.PI / 6),
+                    arrowY - arrowLen * Math.sin(angle - Math.PI / 6)
+                );
+                ctx.moveTo(arrowX, arrowY);
+                ctx.lineTo(
+                    arrowX - arrowLen * Math.cos(angle + Math.PI / 6),
+                    arrowY - arrowLen * Math.sin(angle + Math.PI / 6)
+                );
+                ctx.strokeStyle = '#999';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+                ctx.strokeStyle = '#ddd';
+                ctx.lineWidth = 3;
+                
+                // Draw weight label
+                const midX = (fromPos.x + toPos.x) / 2;
+                const midY = (fromPos.y + toPos.y) / 2;
+                ctx.fillStyle = 'white';
+                ctx.fillRect(midX - 15, midY - 12, 30, 24);
+                ctx.fillStyle = '#666';
+                ctx.font = 'bold 14px Arial';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(edge.weight, midX, midY);
+            });
+            
+            // Draw nodes
+            graph.nodes.forEach(node => {
+                const pos = scaleCoords(node.x, node.y);
+                const state = nodeStates[node.id] || 'default';
+                let color = '#fff';
+                
+                // Determine color based on priority
+                if (finalPath && finalPath.includes(node.id)) {
+                    color = '#2196F3'; // Blue for final path
+                } else if (node.id === origin) {
+                    color = '#4CAF50'; // Green for origin
+                } else if (goals.includes(node.id)) {
+                    color = '#F44336'; // Red for goals
+                } else if (state === 'exploring') {
+                    color = '#FFC107'; // Yellow for exploring
+                } else if (state === 'explored') {
+                    color = '#9C27B0'; // Purple for explored
+                }
+                
+                // Draw node circle
+                ctx.beginPath();
+                ctx.arc(pos.x, pos.y, 30, 0, Math.PI * 2);
+                ctx.fillStyle = color;
+                ctx.fill();
+                ctx.strokeStyle = '#333';
+                ctx.lineWidth = 3;
+                ctx.stroke();
+                
+                // Draw node ID
+                ctx.fillStyle = (node.id === origin || goals.includes(node.id) || (finalPath && finalPath.includes(node.id))) ? 'white' : '#333';
+                ctx.font = 'bold 20px Arial';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(node.id, pos.x, pos.y);
+                
+                // Draw coordinates below node
+                ctx.fillStyle = '#666';
+                ctx.font = '12px Arial';
+                ctx.fillText(`(${node.x},${node.y})`, pos.x, pos.y + 45);
+            });
+        }
+        
+        function updateStatus(message, type = '') {
+            const el = document.getElementById('statusMessage');
+            el.textContent = message;
+            el.className = 'status-message';
+            if (type) el.classList.add(type);
+            
+            // Add to message log
+            addToMessageLog(message, type);
+        }
+
+        
+        
+        function displayFinalPath(path) {
+            const el = document.getElementById('finalPathNodes');
+            if (!el) {
+                return;
+            }
+            el.innerHTML = formatPathWithCoords(path);
+        }
+        
+        async function runSearch() {
+            if (isPlaying) return;
+            
+            if (goals.length === 0) {
+                updateStatus('Error: No goal nodes specified!', 'error');
+                return;
+            }
+            
+            clearMessageLog();
+            updateStatus('Running search...', 'info');
+            document.getElementById('nodesExplored').textContent = '0';
+            document.getElementById('pathCost').textContent = '-';
+            nodeStates = {};
+            finalPath = null;
+            displayFinalPath(null);
+            drawGraph();
+            
+            try {
+                const response = await fetch('/search', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ 
+                        algorithm: selectedAlgorithm, 
+                        graph: graph, 
+                        start: origin, 
+                        goals: goals 
+                    })
+                });
+                
+                const result = await response.json();
+                searchSteps = result.steps;
+                currentStep = 0;
+                finalPath = null;
+                displayFinalPath(null);
+                
+                if (result.success) {
+                    updateStatus(`Ready to animate ${selectedAlgorithm}`, 'success');
+                    isPlaying = true;
+                    animateSteps();
+                } else {
+                    updateStatus('No path found!', 'error');
+                    drawGraph();
+                }
+            } catch (error) {
+                updateStatus('Error connecting to server!', 'error');
+                console.error('Error:', error);
+            }
+        }
+        
+        function animateSteps() {
+            if (!isPlaying || currentStep >= searchSteps.length) {
+                if (currentStep >= searchSteps.length && searchSteps.length > 0) {
+                    const lastStep = searchSteps[searchSteps.length - 1];
+                    if (lastStep.type === 'goal' && lastStep.path) {
+                        finalPath = lastStep.path;
+                        displayFinalPath(finalPath);
+                        if (typeof lastStep.cost === 'number') {
+                            document.getElementById('pathCost').textContent = lastStep.cost.toFixed(1);
+                        }
+                        updateStatus('Search complete! Path found.', 'success');
+                        drawGraph();
+                    }
+                }
+                isPlaying = false;
+                return;
+            }
+            
+            const step = searchSteps[currentStep];
+            
+            if (step.type === 'expand') {
+                nodeStates[step.node] = 'explored';
+                let count = Object.keys(nodeStates).filter(k => nodeStates[k] === 'explored').length;
+                document.getElementById('nodesExplored').textContent = count;
+                addToMessageLog(step.message, 'expand');
+            } else if (step.type === 'discover') {
+                nodeStates[step.node] = 'exploring';
+                addToMessageLog(step.message, 'discover');
+            } else if (step.type === 'start') {
+                addToMessageLog(step.message, 'start');
+            } else if (step.type === 'goal') {
+                if (Array.isArray(step.path)) {
+                    finalPath = step.path.slice();
+                    displayFinalPath(finalPath);
+                }
+                if (typeof step.cost === 'number') {
+                    document.getElementById('pathCost').textContent = step.cost.toFixed(1);
+                }
+                addToMessageLog(step.message, 'goal');
+            } else {
+                addToMessageLog(step.message);
+            }
+            
+            drawGraph();
+            updateStatus(step.message);
+            currentStep++;
+            
+            animationTimer = setTimeout(animateSteps, animationSpeed);
+        }
+        
+        function stepForward() {
+            if (currentStep >= searchSteps.length) return;
+            
+            isPlaying = false;
+            if (animationTimer) clearTimeout(animationTimer);
+            
+            const step = searchSteps[currentStep];
+            
+            if (step.type === 'expand') {
+                nodeStates[step.node] = 'explored';
+                let count = Object.keys(nodeStates).filter(k => nodeStates[k] === 'explored').length;
+                document.getElementById('nodesExplored').textContent = count;
+                addToMessageLog(step.message, 'expand');
+            } else if (step.type === 'discover') {
+                nodeStates[step.node] = 'exploring';
+                addToMessageLog(step.message, 'discover');
+            } else if (step.type === 'start') {
+                addToMessageLog(step.message, 'start');
+            } else if (step.type === 'goal') {
+                if (Array.isArray(step.path)) {
+                    finalPath = step.path.slice();
+                    displayFinalPath(finalPath);
+                }
+                if (typeof step.cost === 'number') {
+                    document.getElementById('pathCost').textContent = step.cost.toFixed(1);
+                }
+                addToMessageLog(step.message, 'goal');
+            } else {
+                addToMessageLog(step.message);
+            }
+            
+            drawGraph();
+            updateStatus(step.message);
+            currentStep++;
+            
+            if (currentStep >= searchSteps.length && searchSteps.length > 0) {
+                const lastStep = searchSteps[searchSteps.length - 1];
+                if (lastStep.type === 'goal' && lastStep.path) {
+                    finalPath = lastStep.path;
+                    displayFinalPath(finalPath);
+                    if (typeof lastStep.cost === 'number') {
+                        document.getElementById('pathCost').textContent = lastStep.cost.toFixed(1);
+                    }
+                    updateStatus('Search complete! Path found.', 'success');
+                    drawGraph();
+                }
+            }
+        }
+        
+        function pauseAnimation() {
+            isPlaying = false;
+            if (animationTimer) clearTimeout(animationTimer);
+            updateStatus('Paused');
+        }
+        
+        function resetVisualization() {
+            isPlaying = false;
+            if (animationTimer) clearTimeout(animationTimer);
+            searchSteps = [];
+            currentStep = 0;
+            nodeStates = {};
+            finalPath = null;
+            displayFinalPath(null);
+            document.getElementById('nodesExplored').textContent = '0';
+            document.getElementById('pathCost').textContent = '-';
+            clearMessageLog();
+            drawGraph();
+            updateStatus('Ready to start');
+        }
+        
+        // Event Listeners
+        document.querySelectorAll('.algorithm-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                document.querySelectorAll('.algorithm-btn').forEach(b => b.classList.remove('active'));
+                this.classList.add('active');
+                selectedAlgorithm = this.getAttribute('data-algo');
+                resetVisualization();
+            });
+        });
+        
+        document.getElementById('runBtn').addEventListener('click', runSearch);
+        document.getElementById('stepBtn').addEventListener('click', stepForward);
+        document.getElementById('pauseBtn').addEventListener('click', pauseAnimation);
+        document.getElementById('resetBtn').addEventListener('click', resetVisualization);
+        document.getElementById('clearLogBtn').addEventListener('click', clearMessageLog);
+        document.getElementById('updateGraphBtn').addEventListener('click', updateGraphConfig);
+        
+        document.getElementById('speedSlider').addEventListener('input', function() {
+            animationSpeed = parseInt(this.value);
+            document.getElementById('speedValue').textContent = animationSpeed;
+        });
+        
+        // Initialize and draw
+        initializeControls();
+        drawGraph();
+        displayFinalPath(null);
+    </script>
+</body>
+</html>
