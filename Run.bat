@@ -1,6 +1,11 @@
 @echo off
 color 0A
 title PathFinder AI - Route Finding Visualizer
+set "BASE_DIR=%~dp0"
+set "VENV_DIR=%BASE_DIR%.venv"
+set "VENV_PYTHON=%VENV_DIR%\Scripts\python.exe"
+set "VENV_ACTIVATE=%VENV_DIR%\Scripts\activate"
+set "VENV_READY=0"
 
 :MENU
 cls
@@ -46,12 +51,28 @@ if "%cmd%"=="" (
     goto CLI
 )
 
+call :ENSURE_VENV
+if not "%VENV_READY%"=="1" goto MENU
+
 cls
 echo ================================================
 echo Running Command: python search.py PathFinder-test.txt %cmd%
 echo ================================================
 echo.
+call "%VENV_ACTIVATE%" >nul
+if errorlevel 1 (
+    echo [ERROR] Failed to activate virtual environment.
+    pause
+    goto MENU
+)
+
 python search.py PathFinder-test.txt %cmd%
+set "RUN_EXIT_CODE=%ERRORLEVEL%"
+call deactivate >nul
+if not "%RUN_EXIT_CODE%"=="0" (
+    echo.
+    echo [INFO] Command exited with code %RUN_EXIT_CODE%.
+)
 echo.
 echo ================================================
 pause
@@ -64,13 +85,24 @@ echo ================================================
 echo        Starting Web GUI Visualizer
 echo ================================================
 echo.
+call :ENSURE_VENV
+if not "%VENV_READY%"=="1" goto MENU
+
+call "%VENV_ACTIVATE%" >nul
+if errorlevel 1 (
+    echo [ERROR] Failed to activate virtual environment.
+    pause
+    goto MENU
+)
+
 echo Checking if Flask is installed...
 python -c "import flask" 2>nul
 if errorlevel 1 (
     echo.
-    echo [ERROR] Flask is not installed!
+    echo [ERROR] Flask is not installed in the virtual environment!
     echo Please select option 5 to install dependencies.
     echo.
+    call deactivate >nul
     pause
     goto MENU
 )
@@ -85,6 +117,13 @@ echo ================================================
 echo.
 start http://localhost:5000
 python search.py
+set "RUN_EXIT_CODE=%ERRORLEVEL%"
+call deactivate >nul
+if not "%RUN_EXIT_CODE%"=="0" (
+    echo.
+    echo [INFO] Server exited with code %RUN_EXIT_CODE%.
+    pause
+)
 goto MENU
 
 :CLI_ALGO
@@ -123,7 +162,23 @@ echo ================================================
 echo        Running %ALGO% Algorithm
 echo ================================================
 echo.
+call :ENSURE_VENV
+if not "%VENV_READY%"=="1" goto MENU
+
+call "%VENV_ACTIVATE%" >nul
+if errorlevel 1 (
+    echo [ERROR] Failed to activate virtual environment.
+    pause
+    goto MENU
+)
+
 python search.py PathFinder-test.txt %ALGO%
+set "RUN_EXIT_CODE=%ERRORLEVEL%"
+call deactivate >nul
+if not "%RUN_EXIT_CODE%"=="0" (
+    echo.
+    echo [INFO] Command exited with code %RUN_EXIT_CODE%.
+)
 echo.
 echo ================================================
 pause
@@ -135,21 +190,23 @@ echo ================================================
 echo        Checking Dependencies
 echo ================================================
 echo.
-echo Checking Python version...
-python --version 2>nul
-if errorlevel 1 (
-    echo [ERROR] Python is not installed or not in PATH!
-    echo Please install Python from https://www.python.org/
-) else (
-    echo [OK] Python is installed
+if not exist "%VENV_PYTHON%" (
+    echo [ERROR] Virtual environment not found at "%VENV_DIR%".
+    echo Please select option 5 to install dependencies.
+    echo.
+    pause
+    goto MENU
 )
+
+echo Checking Python version in virtual environment...
+"%VENV_PYTHON%" --version
 echo.
-echo Checking Flask...
-python -c "import flask; print('Flask version:', flask.__version__)" 2>nul
+echo Checking Flask (virtual environment)...
+"%VENV_PYTHON%" -c "import flask; print('Flask version:', flask.__version__)" 2>nul
 if errorlevel 1 (
-    echo [ERROR] Flask is not installed
+    echo [ERROR] Flask is not installed in the virtual environment.
 ) else (
-    echo [OK] Flask is installed
+    echo [OK] Flask is installed in the virtual environment.
 )
 echo.
 echo Checking required files...
@@ -157,12 +214,6 @@ if exist "search.py" (
     echo [OK] search.py found
 ) else (
     echo [ERROR] search.py not found!
-)
-
-if exist "app.py" (
-    echo [OK] app.py found
-) else (
-    echo [ERROR] app.py not found!
 )
 
 if exist "PathFinder-test.txt" (
@@ -188,14 +239,53 @@ echo ================================================
 echo        Installing Dependencies
 echo ================================================
 echo.
-echo Installing Flask...
-pip install flask
-echo.
+echo Checking for Python...
+python --version >nul 2>&1
 if errorlevel 1 (
-    echo [ERROR] Failed to install dependencies!
-    echo Make sure pip is installed and working.
+    echo [ERROR] Python is not installed or not found in PATH.
+    echo Please install Python 3.x before continuing.
+    echo.
+    pause
+    goto MENU
+)
+
+if not exist "%VENV_PYTHON%" (
+    echo Creating virtual environment at "%VENV_DIR%" ...
+    python -m venv "%VENV_DIR%"
+    if errorlevel 1 (
+        echo [ERROR] Failed to create virtual environment.
+        echo Make sure Python's venv module is available.
+        echo.
+        pause
+        goto MENU
+    )
+)
+
+call "%VENV_ACTIVATE%" >nul
+if errorlevel 1 (
+    echo [ERROR] Failed to activate virtual environment.
+    echo.
+    pause
+    goto MENU
+)
+
+if exist "requirements.txt" (
+    echo Installing from requirements.txt ...
+    python -m pip install --upgrade pip >nul
+    python -m pip install -r requirements.txt
 ) else (
-    echo [SUCCESS] Dependencies installed successfully!
+    echo requirements.txt not found. Installing Flask only...
+    python -m pip install Flask
+)
+
+set "PIP_EXIT_CODE=%ERRORLEVEL%"
+call deactivate >nul
+if not "%PIP_EXIT_CODE%"=="0" (
+    echo.
+    echo [ERROR] Failed to install one or more dependencies.
+) else (
+    echo.
+    echo [SUCCESS] Dependencies installed successfully in the virtual environment!
 )
 echo.
 echo ================================================
@@ -249,5 +339,16 @@ echo ================================================
 echo.
 timeout /t 2 >nul
 exit
+
+:ENSURE_VENV
+if exist "%VENV_PYTHON%" (
+    set "VENV_READY=1"
+    goto :EOF
+)
+set "VENV_READY=0"
+echo [ERROR] Virtual environment not found at "%VENV_DIR%".
+echo Please run option 5 to install dependencies first.
+pause
+goto :EOF
 
 :END
