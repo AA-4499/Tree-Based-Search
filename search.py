@@ -468,6 +468,23 @@ def search():
     
     return jsonify(result)
 
+@app.route('/reload', methods=['POST'])
+def reload_graph():
+    """Reload the graph data from the file"""
+    try:
+        graph_data, start_id, goals = load_default_graph()
+        return jsonify({
+            'success': True,
+            'graph_data': graph_data,
+            'start_id': start_id,
+            'goals': goals
+        })
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+    
 if __name__ == '__main__':
     # Logic to switch between CLI and Web GUI mode
     if len(sys.argv) > 1:
