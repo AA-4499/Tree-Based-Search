@@ -138,6 +138,18 @@ def load_default_graph():
 
     return graph_payload, start_id, goals
 
+def get_algorithm_name(algorithm):
+    """Get the full name of the algorithm for display"""
+    names = {
+        'BFS': 'Breadth-First Search',
+        'DFS': 'Depth-First Search',
+        'GBFS': 'Greedy Best-First Search',
+        'AS': 'A* Search',
+        'CUS1': 'Iterative Deepening Search (CUS1-Uninformed)',
+        'CUS2': 'Weighted A* Search (CUS2-Informed)',
+    }
+    return names.get(algorithm, algorithm)
+
 def run_cli(file_path, algorithm):
     """Loads data, executes the search algorithm, and prints the result to CLI."""
     try:
@@ -145,13 +157,6 @@ def run_cli(file_path, algorithm):
     except (FileNotFoundError, ValueError) as e:
         print(f"Error parsing file '{file_path}': {e}")
         return
-
-    print("=" * 40)
-    print(f"PathFinder AI - {algorithm} Search")
-    print("=" * 40)
-    print(f"Origin: Node {start_id}")
-    print(f"Goals: {goals}")
-    print("-" * 40)
 
     # Dictionary mapping algorithm names to their functions
     search_algorithms = {
@@ -171,21 +176,40 @@ def run_cli(file_path, algorithm):
     search_func = search_algorithms[algorithm]
     result = search_func(nodes, edges, start_id, goals)
 
-    if result['success']:
-        print(f"SUCCESS: Goal reached via node {result['path'][-1]}")
-        
-        # Build path string with coordinates
-        path_with_coords = []
-        for node_id in result['path']:
-            node = nodes[node_id]
-            path_with_coords.append(f"{node_id}({node.x},{node.y})")
-        
-        print(f"Path: {' -> '.join(path_with_coords)}")
-        print(f"Total Cost: {result['cost']:.1f}")
-    else:
-        print("FAILURE: No path found to any destination.")
+    # Print header
+    print(f"{file_path} {algorithm}")
+    print("=" * 53)
     
-    print("=" * 40)
+    if result['success']:
+        goal_node = result['path'][-1]
+        print(f"Goal Reached: Node {goal_node}")
+        
+        # Print nodes created if available
+        if 'nodes_created' in result:
+            print(f"Total Nodes Created: {result['nodes_created']}")
+        
+        # Print search method name
+        print(f"Search Method: {get_algorithm_name(algorithm)}")
+        
+        # Build and print path
+        path_str = "->".join(str(x) for x in result['path'])
+        print(f"Shortest Path: {path_str}")
+        
+        # Print depth level if available (mainly for CUS1)
+        if 'depth_reached' in result:
+            print(f"Depth Level Reached: {result['depth_reached']}")
+    else:
+        print("Goal not reached.")
+        
+        # Print nodes created if available
+        if 'nodes_created' in result:
+            print(f"Total Nodes Created: {result['nodes_created']}")
+        
+        # Print search method name
+        print(f"Search Method: {get_algorithm_name(algorithm)}")
+        print("Path: None")
+    
+    print("=" * 53)
 
 
 def heuristic(node, goal_node):
@@ -195,6 +219,7 @@ def bfs_search_steps(nodes, edges, start_id, goals):
     queue = deque([(start_id, [start_id], 0)])
     visited = set([start_id])
     steps = []
+    nodes_created = 1  # Count the start node
     
     steps.append({'type': 'start', 'node': start_id, 'message': f'Starting BFS from node {start_id}'})
     
@@ -204,27 +229,30 @@ def bfs_search_steps(nodes, edges, start_id, goals):
         
         if current_id in goals:
             steps.append({'type': 'goal', 'node': current_id, 'path': path, 'cost': cost, 'message': f'Goal {current_id} reached!'})
-            return {'success': True, 'path': path, 'steps': steps, 'cost': cost}
+            return {'success': True, 'path': path, 'steps': steps, 'cost': cost, 'nodes_created': nodes_created}
         
         if current_id in edges:
             for neighbor_id, weight in sorted(edges[current_id].items(), key=lambda x: x[0]):
                 if neighbor_id not in visited:
                     visited.add(neighbor_id)
+                    nodes_created += 1
                     new_cost = cost + weight
                     queue.append((neighbor_id, path + [neighbor_id], new_cost))
                     steps.append({'type': 'discover', 'node': neighbor_id, 'parent': current_id, 'message': f'Discovered node {neighbor_id}'})
     
-    return {'success': False, 'path': None, 'steps': steps}
+    return {'success': False, 'path': None, 'steps': steps, 'nodes_created': nodes_created}
 
 def dfs_search_steps(nodes, edges, start_id, goals):
     steps = []
     result_path = None
     result_cost = None
+    nodes_created = 0
     
     steps.append({'type': 'start', 'node': start_id, 'message': f'Starting DFS from node {start_id}'})
     
     def _dfs(node_id, path, cost, path_set):
-        nonlocal result_path, result_cost
+        nonlocal result_path, result_cost, nodes_created
+        nodes_created += 1
         steps.append({'type': 'expand', 'node': node_id, 'path': path, 'cost': cost, 'message': f'Exploring node {node_id} (cost: {cost:.1f})'})
         
         if node_id in goals:
@@ -244,7 +272,7 @@ def dfs_search_steps(nodes, edges, start_id, goals):
         return False
     
     _dfs(start_id, [start_id], 0.0, {start_id})
-    return {'success': result_path is not None, 'path': result_path, 'steps': steps, 'cost': result_cost}
+    return {'success': result_path is not None, 'path': result_path, 'steps': steps, 'cost': result_cost, 'nodes_created': nodes_created}
 
 def gbfs_search_steps(nodes, edges, start_id, goals):
     def best_heuristic(node_id):
@@ -256,6 +284,7 @@ def gbfs_search_steps(nodes, edges, start_id, goals):
     explored = set()
     steps = []
     counter = 1
+    nodes_created = 1
     
     steps.append({'type': 'start', 'node': start_id, 'h': best_heuristic(start_id), 'message': f'Starting GBFS from node {start_id}'})
     
@@ -276,19 +305,20 @@ def gbfs_search_steps(nodes, edges, start_id, goals):
         
         if current_id in goals:
             steps.append({'type': 'goal', 'node': current_id, 'path': path, 'cost': cost_so_far[current_id], 'message': f'Goal {current_id} reached!'})
-            return {'success': True, 'path': path, 'steps': steps, 'cost': cost_so_far[current_id]}
+            return {'success': True, 'path': path, 'steps': steps, 'cost': cost_so_far[current_id], 'nodes_created': nodes_created}
         
         for neighbor_id, weight in sorted(edges.get(current_id, {}).items(), key=lambda x: x[0]):
             if neighbor_id not in explored:
                 if neighbor_id not in parent:
                     parent[neighbor_id] = current_id
                     cost_so_far[neighbor_id] = cost_so_far[current_id] + weight
+                    nodes_created += 1
                 neighbor_h = best_heuristic(neighbor_id)
                 heapq.heappush(open_set, (neighbor_h, counter, neighbor_id))
                 counter += 1
                 steps.append({'type': 'discover', 'node': neighbor_id, 'h': neighbor_h, 'message': f'Discovered node {neighbor_id} (h={neighbor_h:.1f})'})
     
-    return {'success': False, 'path': None, 'steps': steps}
+    return {'success': False, 'path': None, 'steps': steps, 'nodes_created': nodes_created}
 
 def astar_search_steps(nodes, edges, start_id, goals):
     for n in nodes.values():
@@ -304,6 +334,7 @@ def astar_search_steps(nodes, edges, start_id, goals):
     closed = set()
     steps = []
     counter = 1
+    nodes_created = 1
     
     steps.append({'type': 'start', 'node': start_id, 'g': 0, 'h': start.h, 'f': start.f, 'message': f'Starting A* from node {start_id}'})
     
@@ -326,7 +357,7 @@ def astar_search_steps(nodes, edges, start_id, goals):
         
         if current_id in goals:
             steps.append({'type': 'goal', 'node': current_id, 'path': path, 'cost': current.g, 'message': f'Goal {current_id} reached with cost {current.g:.1f}!'})
-            return {'success': True, 'path': path, 'steps': steps, 'cost': current.g}
+            return {'success': True, 'path': path, 'steps': steps, 'cost': current.g, 'nodes_created': nodes_created}
         
         closed.add(current_id)
         
@@ -338,6 +369,8 @@ def astar_search_steps(nodes, edges, start_id, goals):
             tentative_g = current.g + weight
             
             if tentative_g < neighbor.g:
+                if neighbor.g == float('inf'):  # First time visiting
+                    nodes_created += 1
                 neighbor.parent = current
                 neighbor.g = tentative_g
                 neighbor.h = min(heuristic(neighbor, nodes[goal]) for goal in goals)
@@ -346,30 +379,96 @@ def astar_search_steps(nodes, edges, start_id, goals):
                 counter += 1
                 steps.append({'type': 'discover', 'node': neighbor_id, 'g': neighbor.g, 'h': neighbor.h, 'f': neighbor.f, 'message': f'Updated node {neighbor_id} (f={neighbor.f:.1f})'})
     
-    return {'success': False, 'path': None, 'steps': steps}
+    return {'success': False, 'path': None, 'steps': steps, 'nodes_created': nodes_created}
 
 def cus1_search_steps(nodes, edges, start_id, goals):
-    """CUS1: Uninformed search - returns first path found (DFS-style)"""
-    stack = [(start_id, [start_id], 0)]
+    """CUS1: Iterative Deepening Search (IDS) - Uninformed tree-based search"""
     steps = []
+    destinations_set = set(goals)
+    total_nodes_created = 0
     
-    steps.append({'type': 'start', 'node': start_id, 'message': f'Starting CUS1 (Uninformed DFS) from node {start_id}'})
+    # Determine max depth limit
+    all_node_ids = list(nodes.keys())
+    max_depth_limit = max(all_node_ids + [start_id] + goals) + 20
     
-    while stack:
-        current_id, path, cost = stack.pop()
-        steps.append({'type': 'expand', 'node': current_id, 'path': path, 'cost': cost, 'message': f'Exploring node {current_id}'})
+    steps.append({'type': 'start', 'node': start_id, 'message': f'Starting CUS1 (Iterative Deepening Search) from node {start_id}'})
+    
+    def depth_limited_search(node_id, current_path, limit, depth):
+        """Performs depth-limited search (tree-based, no visited set)"""
+        nonlocal total_nodes_created
+        nodes_created = 1
+        total_nodes_created += 1
         
-        if current_id in goals:
-            steps.append({'type': 'goal', 'node': current_id, 'path': path, 'cost': cost, 'message': f'Goal {current_id} reached!'})
-            return {'success': True, 'path': path, 'steps': steps, 'cost': cost}
+        # Add step for node expansion
+        if depth == 0:
+            steps.append({'type': 'expand', 'node': node_id, 'path': current_path, 'depth': depth, 
+                         'message': f'Starting depth-limited search at depth {limit} from node {node_id}'})
+        else:
+            steps.append({'type': 'expand', 'node': node_id, 'path': current_path, 'depth': depth,
+                         'message': f'Exploring node {node_id} at depth {depth}/{limit}'})
         
-        for neighbor_id, weight in sorted(edges.get(current_id, {}).items(), key=lambda x: x[0], reverse=True):
-            if neighbor_id not in path:
-                new_cost = cost + weight
-                stack.append((neighbor_id, path + [neighbor_id], new_cost))
-                steps.append({'type': 'discover', 'node': neighbor_id, 'message': f'Discovered node {neighbor_id}'})
+        # Goal test
+        if node_id in destinations_set:
+            return True, current_path, nodes_created, False
+        
+        # Depth limit reached
+        if limit == 0:
+            return False, None, nodes_created, True
+        
+        # Expand children in ascending order (tree search - allows revisiting)
+        children = []
+        if node_id in edges:
+            children = sorted(edges[node_id].keys())
+        
+        for child_id in children:
+            steps.append({'type': 'discover', 'node': child_id, 'parent': node_id, 
+                         'message': f'Discovered node {child_id} from {node_id}'})
+            
+            found, path, child_created, cutoff = depth_limited_search(
+                child_id, current_path + [child_id], limit - 1, depth + 1
+            )
+            nodes_created += child_created
+            
+            if found:
+                return True, path, nodes_created, False
+        
+        # Exhausted all children without finding goal
+        return False, None, nodes_created, False
     
-    return {'success': False, 'path': None, 'steps': steps}
+    # Iterative deepening loop
+    for depth_limit in range(0, max_depth_limit + 1):
+        steps.append({'type': 'iteration', 'depth': depth_limit, 
+                     'message': f'Starting iteration with depth limit {depth_limit}'})
+        
+        found, path, nodes_created, cutoff = depth_limited_search(start_id, [start_id], depth_limit, 0)
+        
+        if found:
+            # Calculate cost
+            cost = 0
+            for i in range(len(path) - 1):
+                if path[i] in edges and path[i+1] in edges[path[i]]:
+                    cost += edges[path[i]][path[i+1]]
+            
+            steps.append({'type': 'goal', 'node': path[-1], 'path': path, 'cost': cost, 
+                         'depth': depth_limit, 'nodes_created': total_nodes_created,
+                         'message': f'Goal {path[-1]} reached at depth {len(path)-1}!'})
+            
+            return {
+                'success': True, 
+                'path': path, 
+                'steps': steps, 
+                'cost': cost,
+                'nodes_created': total_nodes_created,
+                'depth_reached': len(path) - 1
+            }
+    
+    steps.append({'type': 'failure', 'message': 'Goal not reached within depth limit'})
+    return {
+        'success': False, 
+        'path': None, 
+        'steps': steps,
+        'nodes_created': total_nodes_created
+    }
 
 def cus2_search_steps(nodes, edges, start_id, goals):
     """CUS2: Weighted A* Search (w=10.0) - emphasizes heuristic for faster search"""
@@ -388,6 +487,7 @@ def cus2_search_steps(nodes, edges, start_id, goals):
     closed = set()
     steps = []
     counter = 1
+    nodes_created = 1
     
     steps.append({'type': 'start', 'node': start_id, 'g': 0, 'h': start.h, 'f': start.f, 'message': f'Starting CUS2 (Weighted A* w={WEIGHT}) from node {start_id}'})
     
@@ -409,7 +509,7 @@ def cus2_search_steps(nodes, edges, start_id, goals):
         
         if current_id in goals:
             steps.append({'type': 'goal', 'node': current_id, 'path': path, 'cost': current.g, 'message': f'Goal {current_id} reached with cost {current.g:.1f}!'})
-            return {'success': True, 'path': path, 'steps': steps, 'cost': current.g}
+            return {'success': True, 'path': path, 'steps': steps, 'cost': current.g, 'nodes_created': nodes_created}
         
         closed.add(current_id)
         
@@ -421,6 +521,8 @@ def cus2_search_steps(nodes, edges, start_id, goals):
             tentative_g = current.g + weight
             
             if tentative_g < neighbor.g:
+                if neighbor.g == float('inf'):  # First time visiting
+                    nodes_created += 1
                 neighbor.parent = current
                 neighbor.g = tentative_g
                 neighbor.h = min(heuristic(neighbor, nodes[goal]) for goal in goals)
@@ -429,7 +531,7 @@ def cus2_search_steps(nodes, edges, start_id, goals):
                 counter += 1
                 steps.append({'type': 'discover', 'node': neighbor_id, 'g': neighbor.g, 'h': neighbor.h, 'f': neighbor.f, 'message': f'Updated node {neighbor_id} (f={neighbor.f:.1f})'})
     
-    return {'success': False, 'path': None, 'steps': steps}
+    return {'success': False, 'path': None, 'steps': steps, 'nodes_created': nodes_created}
 
 @app.route('/')
 def index():
