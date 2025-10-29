@@ -6,6 +6,7 @@ import sys
 import re
 
 app = Flask(__name__)
+DEFAULT_GRAPH_FILE = 'PathFinder-test.txt'
 
 class Node:
     def __init__(self, id, x, y):
@@ -103,6 +104,40 @@ def parse_text_file(filepath):
 
     return nodes, edges, start_id, goals
 
+def graph_to_frontend(nodes, edges):
+    """Convert parsed nodes/edges into the structure expected by the frontend."""
+    node_list = [
+        {'id': node.id, 'x': node.x, 'y': node.y}
+        for node in nodes.values()
+    ]
+    node_list.sort(key=lambda item: item['id'])
+
+    edge_list = []
+    for from_id in sorted(edges.keys()):
+        for to_id, weight in sorted(edges[from_id].items(), key=lambda item: item[0]):
+            edge_list.append({'from': from_id, 'to': to_id, 'weight': weight})
+
+    return {'nodes': node_list, 'edges': edge_list}
+
+def load_default_graph():
+    """Load the default graph data for the web UI from the configured text file."""
+    graph_payload = {'nodes': [], 'edges': []}
+    start_id = None
+    goals = []
+
+    try:
+        nodes, edges, start_id, goals = parse_text_file(DEFAULT_GRAPH_FILE)
+        graph_payload = graph_to_frontend(nodes, edges)
+    except (FileNotFoundError, ValueError) as exc:
+        app.logger.warning("Failed to load default graph '%s': %s", DEFAULT_GRAPH_FILE, exc)
+
+    if start_id is None and graph_payload['nodes']:
+        start_id = graph_payload['nodes'][0]['id']
+    if goals is None:
+        goals = []
+
+    return graph_payload, start_id, goals
+
 def run_cli(file_path, algorithm):
     """Loads data, executes the search algorithm, and prints the result to CLI."""
     # ... (function body remains as in previous step, using the modified parse_text_file)
@@ -146,6 +181,53 @@ def run_cli(file_path, algorithm):
     
     print("=" * 40)
 
+
+def run_cli(file_path, algorithm):
+    """Loads data, executes the search algorithm, and prints the result to CLI."""
+    try:
+        nodes, edges, start_id, goals = parse_text_file(file_path)
+    except FileNotFoundError:
+        print(f"Error: Input file '{file_path}' not found.")
+        return
+    except ValueError as e:
+        print(f"Error parsing file '{file_path}': {e}")
+        return
+
+    print("=" * 40)
+    print(f"PathFinder AI - {algorithm} Search")
+    print("=" * 40)
+    print(f"Origin: Node {start_id}")
+    print(f"Goals: {goals}")
+    print("-" * 40)
+
+    # Dictionary mapping algorithm names to their functions
+    search_algorithms = {
+        'BFS': bfs_search_steps,
+        'DFS': dfs_search_steps,
+        'GBFS': gbfs_search_steps,
+        'AS': astar_search_steps,
+        'CUS1': cus1_search_steps,
+        'CUS2': cus2_search_steps,
+    }
+
+    if algorithm not in search_algorithms:
+        print(f"Error: Unknown algorithm '{algorithm}'. Available: {', '.join(search_algorithms.keys())}")
+        return
+
+    # Execute the search (we don't need all the steps, just the final result)
+    search_func = search_algorithms[algorithm]
+    result = search_func(nodes, edges, start_id, goals)
+
+    if result['success']:
+        print(f"SUCCESS: Goal reached via node {result['path'][-1]}")
+        print(f"Path: {' -> '.join(map(str, result['path']))}")
+        print(f"Total Cost: {result['cost']:.1f}")
+    else:
+        print("FAILURE: No path found to any destination.")
+    
+    print("=" * 40)
+
+
 def heuristic(node, goal_node):
     return math.sqrt((node.x - goal_node.x)**2 + (node.y - goal_node.y)**2)
 
@@ -175,34 +257,34 @@ def bfs_search_steps(nodes, edges, start_id, goals):
     return {'success': False, 'path': None, 'steps': steps}
 
 def dfs_search_steps(nodes, edges, start_id, goals):
-    best_cost = float('inf')
-    best_path = None
     steps = []
+    result_path = None
+    result_cost = None
     
     steps.append({'type': 'start', 'node': start_id, 'message': f'Starting DFS from node {start_id}'})
     
-    def _dfs(node_id, path, cost, visited):
-        nonlocal best_cost, best_path
+    def _dfs(node_id, path, cost, path_set):
+        nonlocal result_path, result_cost
         steps.append({'type': 'expand', 'node': node_id, 'path': path, 'cost': cost, 'message': f'Exploring node {node_id} (cost: {cost:.1f})'})
         
         if node_id in goals:
-            if cost < best_cost:
-                best_cost = cost
-                best_path = path[:]
-                steps.append({'type': 'goal', 'node': node_id, 'path': path, 'cost': cost, 'message': f'Goal {node_id} found with cost {cost:.1f}'})
-            return
-        
-        if cost >= best_cost:
-            return
+            result_path = path[:]
+            result_cost = cost
+            steps.append({'type': 'goal', 'node': node_id, 'path': path, 'cost': cost, 'message': f'Goal {node_id} found with cost {cost:.1f}'})
+            return True
         
         for nbr_id, weight in sorted(edges.get(node_id, {}).items(), key=lambda x: x[0]):
-            if nbr_id not in visited:
-                visited.add(nbr_id)
-                _dfs(nbr_id, path + [nbr_id], cost + weight, visited)
-                visited.remove(nbr_id)
+            if nbr_id not in path_set:
+                path_set.add(nbr_id)
+                steps.append({'type': 'discover', 'node': nbr_id, 'parent': node_id, 'message': f'Discovered node {nbr_id}'})
+                if _dfs(nbr_id, path + [nbr_id], cost + weight, path_set):
+                    return True
+                path_set.remove(nbr_id)
+        
+        return False
     
     _dfs(start_id, [start_id], 0.0, {start_id})
-    return {'success': best_path is not None, 'path': best_path, 'steps': steps, 'cost': best_cost if best_path else None}
+    return {'success': result_path is not None, 'path': result_path, 'steps': steps, 'cost': result_cost}
 
 def gbfs_search_steps(nodes, edges, start_id, goals):
     def best_heuristic(node_id):
@@ -267,6 +349,10 @@ def astar_search_steps(nodes, edges, start_id, goals):
     
     while open_set:
         _, _, current_id = heapq.heappop(open_set)
+
+        if current_id in closed:
+            continue
+
         current = nodes[current_id]
         
         path = []
@@ -387,31 +473,24 @@ def cus2_search_steps(nodes, edges, start_id, goals):
 
 @app.route('/')
 def index():
-    try:
-        nodes, edges, start_id, goals = parse_text_file("PathFinder-test.txt")
-
-        graph_data = {
-            "nodes": [{"id": n.id, "x": n.x, "y": n.y} for n in nodes.values()],
-            "edges": [{"from": a, "to": b, "weight": w} for a in edges for b, w in edges[a].items()],
-            "origin": start_id,
-            "goals": goals
-        }
-
-        return render_template('index.html', graph_data=graph_data)
-    except Exception as e:
-        return f"Error loading graph: {str(e)}"
-
+    graph_data, start_id, goals = load_default_graph()
+    return render_template(
+        'index.html',
+        graph_data=graph_data,
+        start_id=start_id,
+        goals=goals
+    )
 
 @app.route('/search', methods=['POST'])
 def search():
     data = request.json
     algorithm = data['algorithm']
-
-    try:
-        nodes, edges, start_id, goals = parse_text_file("PathFinder-test.txt")
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
+    graph_data = data['graph']
+    start_id = data['start']
+    goals = data['goals']
+    
+    nodes, edges = parse_graph_data(graph_data)
+    
     if algorithm == 'BFS':
         result = bfs_search_steps(nodes, edges, start_id, goals)
     elif algorithm == 'DFS':
@@ -429,8 +508,8 @@ def search():
     
     return jsonify(result)
 
-
 if __name__ == '__main__':
+    # Logic to switch between CLI and Web GUI mode
     if len(sys.argv) > 1:
         # CLI mode: Arguments are present.
         # Format: python search.py <file> [<method>]
