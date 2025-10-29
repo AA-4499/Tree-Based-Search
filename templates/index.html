@@ -36,13 +36,15 @@
         }
         .content { display: flex; gap: 20px; padding: 20px; }
         .sidebar {
-            flex: 0 0 300px;
+            flex: 0 0 320px;
             background: #f8f9fa;
             border-radius: 15px;
             padding: 20px;
             display: flex;
             flex-direction: column;
             gap: 20px;
+            max-height: 90vh;
+            overflow-y: auto;
         }
         .control-section {
             background: white;
@@ -93,6 +95,26 @@
         .btn-danger:hover { background: #c82333; }
         .speed-control { margin: 10px 0; }
         .speed-control input[type="range"] { width: 100%; margin: 10px 0; }
+        .input-group {
+            margin: 10px 0;
+        }
+        .input-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 600;
+            color: #333;
+        }
+        .input-group input, .input-group select {
+            width: 100%;
+            padding: 8px;
+            border: 2px solid #e0e0e0;
+            border-radius: 5px;
+            font-size: 0.9em;
+        }
+        .input-group input:focus, .input-group select:focus {
+            outline: none;
+            border-color: #667eea;
+        }
         .stats {
             background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
             color: white;
@@ -184,6 +206,11 @@
             font-size: 0.8em;
             margin-right: 8px;
         }
+        .help-text {
+            font-size: 0.85em;
+            color: #666;
+            margin-top: 5px;
+        }
     </style>
 </head>
 <body>
@@ -203,6 +230,21 @@
                     <button class="algorithm-btn" data-algo="CUS1">CUS1 - Custom Uninformed</button>
                     <button class="algorithm-btn" data-algo="CUS2">CUS2 - Weighted A* (w=10)</button>
                 </div>
+                
+                <div class="control-section">
+                <h3>📍 Configure Graph</h3>
+                <div class="input-group">
+                        <label for="originSelect">Origin Node:</label>
+                        <select id="originSelect"></select>
+                    </div>
+                    <div class="input-group">
+                        <label for="goalsInput">Goal Nodes:</label>
+                        <input type="text" id="goalsInput" placeholder="e.g., 5, 4">
+                        <div class="help-text">Separate multiple goals with commas</div>
+                    </div>
+                   <button class="action-btn btn-secondary" id="updateGraphBtn">Update Graph</button>
+                </div>
+                
                 <div class="control-section">
                     <h3>⚡ Controls</h3>
                     <button class="action-btn btn-primary" id="runBtn">▶️ Run Search</button>
@@ -214,6 +256,7 @@
                         <input type="range" id="speedSlider" min="50" max="1000" value="300" step="50">
                     </div>
                 </div>
+                
                 <div class="stats">
                     <div class="stat-item">
                         <div class="stat-label">Nodes Explored</div>
@@ -228,6 +271,7 @@
                         <div class="stat-value" id="finalPathNodes">-</div>
                     </div>
                 </div>
+                
                 <div class="legend">
                     <div class="legend-item"><div class="legend-color" style="background: #4CAF50;"></div><span>Origin</span></div>
                     <div class="legend-item"><div class="legend-color" style="background: #F44336;"></div><span>Goal</span></div>
@@ -236,6 +280,7 @@
                     <div class="legend-item"><div class="legend-color" style="background: #2196F3;"></div><span>Path</span></div>
                 </div>
             </div>
+            
             <div class="canvas-container">
                 <canvas id="canvas" width="900" height="600"></canvas>
                 <div class="status-message" id="statusMessage">Select an algorithm and click "Run Search" to begin</div>
@@ -270,6 +315,7 @@
         if (!Array.isArray(goals)) {
             goals = [];
         }
+        
         let selectedAlgorithm = 'BFS';
         let searchSteps = [];
         let currentStep = 0;
@@ -279,6 +325,54 @@
         let finalPath = null;
         let animationTimer = null;
         let messageCount = 0;
+        
+        // Initialize dropdowns
+        function initializeControls() {
+            const originSelect = document.getElementById('originSelect');
+            const goalsInput = document.getElementById('goalsInput');
+            
+            // Populate origin dropdown
+            originSelect.innerHTML = '';
+            graph.nodes.forEach(node => {
+                const option = document.createElement('option');
+                option.value = node.id;
+                option.textContent = `Node ${node.id} (${node.x},${node.y})`;
+                if (node.id === origin) {
+                    option.selected = true;
+                }
+                originSelect.appendChild(option);
+            });
+            
+            // Set goals input
+            goalsInput.value = goals.join(', ');
+        }
+        
+        // Update graph configuration
+        function updateGraphConfig() {
+            const originSelect = document.getElementById('originSelect');
+            const goalsInput = document.getElementById('goalsInput');
+            
+            origin = parseInt(originSelect.value);
+            
+            // Parse goals input
+            const goalsText = goalsInput.value.trim();
+            if (goalsText) {
+                goals = goalsText.split(',').map(g => parseInt(g.trim())).filter(g => !isNaN(g));
+            } else {
+                goals = [];
+            }
+            
+            // Validate goals exist in graph
+            const validGoals = goals.filter(g => graph.nodes.some(n => n.id === g));
+            if (validGoals.length !== goals.length) {
+                updateStatus('Warning: Some goal nodes do not exist in the graph', 'error');
+                goals = validGoals;
+                goalsInput.value = goals.join(', ');
+            }
+            
+            resetVisualization();
+            updateStatus(`Graph updated: Origin=${origin}, Goals=[${goals.join(', ')}]`, 'success');
+        }
         
         // Helper function to get node coordinates
         function getNodeCoords(nodeId) {
@@ -431,6 +525,8 @@
             // Add to message log
             addToMessageLog(message, type);
         }
+
+        
         
         function displayFinalPath(path) {
             const el = document.getElementById('finalPathNodes');
@@ -442,6 +538,11 @@
         
         async function runSearch() {
             if (isPlaying) return;
+            
+            if (goals.length === 0) {
+                updateStatus('Error: No goal nodes specified!', 'error');
+                return;
+            }
             
             clearMessageLog();
             updateStatus('Running search...', 'info');
@@ -619,13 +720,15 @@
         document.getElementById('pauseBtn').addEventListener('click', pauseAnimation);
         document.getElementById('resetBtn').addEventListener('click', resetVisualization);
         document.getElementById('clearLogBtn').addEventListener('click', clearMessageLog);
+        document.getElementById('updateGraphBtn').addEventListener('click', updateGraphConfig);
         
         document.getElementById('speedSlider').addEventListener('input', function() {
             animationSpeed = parseInt(this.value);
             document.getElementById('speedValue').textContent = animationSpeed;
         });
         
-        // Initial draw
+        // Initialize and draw
+        initializeControls();
         drawGraph();
         displayFinalPath(null);
     </script>
