@@ -34,9 +34,148 @@
             margin-bottom: 10px;
             text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.2);
         }
-        .content { display: flex; gap: 20px; padding: 20px; }
+        .content { display: flex; gap: 20px; padding: 20px; align-items: flex-start; flex-wrap: wrap; }
+        .main-content {
+            flex: 1 1 0;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            min-width: 0;
+        }
+        .visualization-layout {
+            display: flex;
+            gap: 20px;
+            align-items: stretch;
+            flex-wrap: wrap;
+        }
+        .canvas-wrapper {
+            flex: 1 1 600px;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            min-width: 0;
+        }
+        .canvas-card {
+            background: white;
+            border-radius: 15px;
+            padding: 20px;
+            box-shadow: 0 10px 30px rgba(102, 126, 234, 0.15);
+            flex: 1 1 auto;
+        }
+        .canvas-card canvas {
+            display: block;
+            width: 100%;
+            height: auto;
+            max-height: 600px;
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            background: #fafafa;
+        }
+        .insight-panel {
+            flex: 1 1 260px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+        .panel-card {
+            background: white;
+            border-radius: 15px;
+            padding: 18px;
+            box-shadow: 0 10px 28px rgba(102, 126, 234, 0.12);
+        }
+        .panel-title {
+            font-size: 1.05em;
+            font-weight: 600;
+            color: #4c51bf;
+            margin-bottom: 12px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .panel-title .clear-log-btn {
+            margin-left: auto;
+        }
+        .results-panel {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+        .result-item {
+            background: linear-gradient(135deg, #f4f7ff 0%, #eef2ff 100%);
+            border-radius: 12px;
+            padding: 12px 14px;
+            box-shadow: inset 0 0 0 1px rgba(102, 126, 234, 0.12);
+        }
+        .result-label {
+            font-size: 0.8em;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+            color: #5a67d8;
+        }
+        .result-value {
+            font-size: 1.6em;
+            font-weight: 700;
+            color: #1a202c;
+            margin-top: 4px;
+            word-break: break-word;
+        }
+        #finalPathNodes {
+            font-size: 1em;
+            font-weight: 600;
+            line-height: 1.6;
+        }
+        .legend-panel {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+        .legend-list {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .controls-card {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+        .controls-content {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 12px 16px;
+        }
+        .controls-buttons {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+        }
+        .controls-buttons .action-btn {
+            width: auto;
+            min-width: 140px;
+            flex: 1 1 140px;
+        }
+        .controls-card .speed-control {
+            margin: 0;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            flex: 1 1 220px;
+        }
+        .controls-card .speed-control label {
+            margin: 0;
+            font-weight: 600;
+            color: #4a5568;
+            white-space: nowrap;
+        }
+        .controls-card .speed-control input[type="range"] {
+            width: 180px;
+            margin: 0;
+        }
         .sidebar {
-            flex: 0 0 320px;
+            flex: 1 1 320px;
+            max-width: 340px;
+            width: 100%;
             background: #f8f9fa;
             border-radius: 15px;
             padding: 20px;
@@ -115,39 +254,7 @@
             outline: none;
             border-color: #667eea;
         }
-        .stats {
-            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
-            color: white;
-            padding: 15px;
-            border-radius: 10px;
-            text-align: center;
-        }
-        .stat-item { margin: 10px 0; }
-        .stat-label { font-size: 0.9em; opacity: 0.9; }
-        .stat-value { font-size: 1.8em; font-weight: bold; margin-top: 5px; }
-        #finalPathNodes { font-size: 1em; font-weight: 600; line-height: 1.6; word-break: break-word; }
-        .canvas-container {
-            flex: 1;
-            background: white;
-            border-radius: 15px;
-            padding: 20px;
-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-            display: flex;
-            flex-direction: column;
-        }
-        #canvas {
-            border: 2px solid #e0e0e0;
-            border-radius: 10px;
-            background: #fafafa;
-        }
-        .legend {
-            display: flex;
-            justify-content: space-around;
-            margin-top: 15px;
-            flex-wrap: wrap;
-            gap: 10px;
-        }
-        .legend-item { display: flex; align-items: center; gap: 8px; font-size: 0.9em; }
+        .legend-item { display: flex; align-items: center; gap: 10px; font-size: 0.95em; color: #4a5568; }
         .legend-color { width: 20px; height: 20px; border-radius: 50%; border: 2px solid #333; }
         .status-message {
             background: #17a2b8;
@@ -160,21 +267,20 @@
         }
         .status-message.success { background: #28a745; }
         .status-message.error { background: #dc3545; }
-        .message-history {
-            margin-top: 15px;
-            background: #f8f9fa;
-            border-radius: 10px;
-            padding: 15px;
-            max-height: 300px;
-            overflow-y: auto;
-        }
-        .message-history h4 {
-            color: #667eea;
-            margin-bottom: 10px;
-            font-size: 1em;
+        .message-panel {
+            max-height: 360px;
+            min-height: 220px;
             display: flex;
-            justify-content: space-between;
-            align-items: center;
+            flex-direction: column;
+            gap: 12px;
+        }
+        .message-history {
+            flex: 1 1 auto;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            padding-right: 4px;
         }
         .clear-log-btn {
             background: #dc3545;
@@ -227,13 +333,13 @@
                     <button class="algorithm-btn" data-algo="DFS">DFS - Depth First</button>
                     <button class="algorithm-btn" data-algo="GBFS">GBFS - Greedy Best First</button>
                     <button class="algorithm-btn" data-algo="AS">A* - A Star</button>
-                    <button class="algorithm-btn" data-algo="CUS1">CUS1 - Custom Uninformed</button>
-                    <button class="algorithm-btn" data-algo="CUS2">CUS2 - Weighted A* (w=10)</button>
+                    <button class="algorithm-btn" data-algo="CUS1">CUS1 - Depth-Limit Search</button>
+                    <button class="algorithm-btn" data-algo="CUS2">CUS2 - Weighted A*</button>
                 </div>
                 
                 <div class="control-section">
-                <h3>Configure Graph</h3>
-                <div class="input-group">
+                    <h3>Configure Graph</h3>
+                    <div class="input-group">
                         <label for="originSelect">Origin Node:</label>
                         <select id="originSelect"></select>
                     </div>
@@ -242,54 +348,68 @@
                         <input type="text" id="goalsInput" placeholder="e.g., 5, 4">
                         <div class="help-text">Separate multiple goals with commas</div>
                     </div>
-                   <button class="action-btn btn-secondary" id="updateGraphBtn">Update Graph</button>
+                    <button class="action-btn btn-secondary" id="updateGraphBtn">Update Graph</button>
                 </div>
                 
-                <div class="control-section">
-                    <h3>Controls</h3>
-                    <button class="action-btn btn-primary" id="runBtn">Run Search</button>
-                    <button class="action-btn btn-secondary" id="stepBtn">Step Forward</button>
-                    <button class="action-btn btn-secondary" id="pauseBtn">Pause</button>
-                    <button class="action-btn btn-danger" id="resetBtn">Reset</button>
-                    <div class="speed-control">
-                        <label>Animation Speed: <span id="speedValue">300</span>ms</label>
-                        <input type="range" id="speedSlider" min="50" max="1000" value="300" step="50">
-                    </div>
-                </div>
-                
-                <div class="stats">
-                    <div class="stat-item">
-                        <div class="stat-label">Nodes Explored</div>
-                        <div class="stat-value" id="nodesExplored">0</div>
-                    </div>
-                    <div class="stat-item">
-                        <div class="stat-label">Path Cost</div>
-                        <div class="stat-value" id="pathCost">-</div>
-                    </div>
-                    <div class="stat-item">
-                        <div class="stat-label">Final Path</div>
-                        <div class="stat-value" id="finalPathNodes">-</div>
-                    </div>
-                </div>
-                
-                <div class="legend">
-                    <div class="legend-item"><div class="legend-color" style="background: #4CAF50;"></div><span>Origin</span></div>
-                    <div class="legend-item"><div class="legend-color" style="background: #F44336;"></div><span>Goal</span></div>
-                    <div class="legend-item"><div class="legend-color" style="background: #FFC107;"></div><span>Exploring</span></div>
-                    <div class="legend-item"><div class="legend-color" style="background: #9C27B0;"></div><span>Explored</span></div>
-                    <div class="legend-item"><div class="legend-color" style="background: #2196F3;"></div><span>Path</span></div>
-                </div>
             </div>
             
-            <div class="canvas-container">
-                <canvas id="canvas" width="900" height="600"></canvas>
-                <div class="status-message" id="statusMessage">Select an algorithm and click "Run Search" to begin</div>
-                <div class="message-history">
-                    <h4>
+            <div class="main-content">
+                <div class="visualization-layout">
+                    <div class="canvas-wrapper">
+                        <div class="canvas-card">
+                            <canvas id="canvas" width="900" height="600"></canvas>
+                        </div>
+                        <div class="panel-card controls-card">
+                            <div class="panel-title">Controls</div>
+                            <div class="controls-content">
+                                <div class="controls-buttons">
+                                    <button class="action-btn btn-primary" id="runBtn">Run Search</button>
+                                    <button class="action-btn btn-secondary" id="stepBtn">Step Forward</button>
+                                    <button class="action-btn btn-secondary" id="pauseBtn">Pause</button>
+                                    <button class="action-btn btn-danger" id="resetBtn">Reset</button>
+                                </div>
+                                <div class="speed-control">
+                                    <label>Animation Speed: <span id="speedValue">300</span>ms</label>
+                                    <input type="range" id="speedSlider" min="50" max="1000" value="300" step="50">
+                                </div>
+                            </div>
+                        </div>
+                        <div class="status-message" id="statusMessage">Select an algorithm and click "Run Search" to begin</div>
+                    </div>
+                    <div class="insight-panel">
+                        <div class="panel-card results-panel">
+                            <div class="panel-title">Results</div>
+                            <div class="result-item">
+                                <div class="result-label">Nodes Explored</div>
+                                <div class="result-value" id="nodesExplored">0</div>
+                            </div>
+                            <div class="result-item">
+                                <div class="result-label">Path Cost</div>
+                                <div class="result-value" id="pathCost">-</div>
+                            </div>
+                            <div class="result-item">
+                                <div class="result-label">Final Path</div>
+                                <div class="result-value" id="finalPathNodes">-</div>
+                            </div>
+                        </div>
+                        <div class="panel-card legend-panel">
+                            <div class="panel-title">Legend</div>
+                            <div class="legend-list">
+                                <div class="legend-item"><div class="legend-color" style="background: #4CAF50;"></div><span>Origin</span></div>
+                                <div class="legend-item"><div class="legend-color" style="background: #F44336;"></div><span>Goal</span></div>
+                                <div class="legend-item"><div class="legend-color" style="background: #FFC107;"></div><span>Exploring</span></div>
+                                <div class="legend-item"><div class="legend-color" style="background: #9C27B0;"></div><span>Explored</span></div>
+                                <div class="legend-item"><div class="legend-color" style="background: #2196F3;"></div><span>Path</span></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="panel-card message-panel">
+                    <div class="panel-title">
                         Message History
                         <button class="clear-log-btn" id="clearLogBtn">Clear Log</button>
-                    </h4>
-                    <div id="messageLog"></div>
+                    </div>
+                    <div class="message-history" id="messageLog"></div>
                 </div>
             </div>
         </div>
@@ -478,32 +598,48 @@
             graph.nodes.forEach(node => {
                 const pos = scaleCoords(node.x, node.y);
                 const state = nodeStates[node.id] || 'default';
-                let color = '#fff';
+                const isOrigin = node.id === origin;
+                const isGoal = goals.includes(node.id);
+                const isOnFinalPath = finalPath && finalPath.includes(node.id);
                 
-                // Determine color based on priority
-                if (finalPath && finalPath.includes(node.id)) {
-                    color = '#2196F3'; // Blue for final path
-                } else if (node.id === origin) {
-                    color = '#4CAF50'; // Green for origin
-                } else if (goals.includes(node.id)) {
-                    color = '#F44336'; // Red for goals
+                let fillColor = '#ffffff';
+                
+                if (isOnFinalPath) {
+                    fillColor = '#2196F3';
                 } else if (state === 'exploring') {
-                    color = '#FFC107'; // Yellow for exploring
+                    fillColor = '#FFC107';
                 } else if (state === 'explored') {
-                    color = '#9C27B0'; // Purple for explored
+                    fillColor = '#9C27B0';
+                } else if (isGoal) {
+                    fillColor = '#F44336';
+                } else if (isOrigin) {
+                    fillColor = '#4CAF50';
+                }
+                
+                let borderColor = '#333';
+                if (isOnFinalPath) {
+                    borderColor = '#0d47a1';
+                } else if (isGoal) {
+                    borderColor = '#c62828';
+                } else if (isOrigin) {
+                    borderColor = '#2e7d32';
+                } else if (state === 'exploring') {
+                    borderColor = '#ff8f00';
+                } else if (state === 'explored') {
+                    borderColor = '#6a1b9a';
                 }
                 
                 // Draw node circle
                 ctx.beginPath();
                 ctx.arc(pos.x, pos.y, 30, 0, Math.PI * 2);
-                ctx.fillStyle = color;
+                ctx.fillStyle = fillColor;
                 ctx.fill();
-                ctx.strokeStyle = '#333';
+                ctx.strokeStyle = borderColor;
                 ctx.lineWidth = 3;
                 ctx.stroke();
                 
                 // Draw node ID
-                ctx.fillStyle = (node.id === origin || goals.includes(node.id) || (finalPath && finalPath.includes(node.id))) ? 'white' : '#333';
+                ctx.fillStyle = (isOnFinalPath || (!isOnFinalPath && (isGoal || isOrigin))) ? 'white' : '#333';
                 ctx.font = 'bold 20px Arial';
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'middle';
