@@ -4,7 +4,7 @@ title PathFinder AI - Route Finding Visualizer
 set "BASE_DIR=%~dp0"
 set "VENV_DIR=%BASE_DIR%.venv"
 set "VENV_PYTHON=%VENV_DIR%\Scripts\python.exe"
-set "VENV_ACTIVATE=%VENV_DIR%\Scripts\activate"
+set "VENV_ACTIVATE=%VENV_DIR%\Scripts\activate.bat"
 set "VENV_READY=0"
 
 :MENU
@@ -137,8 +137,8 @@ echo [1] BFS  - Breadth-First Search
 echo [2] DFS  - Depth-First Search
 echo [3] GBFS - Greedy Best-First Search
 echo [4] AS   - A* Search
-echo [5] CUS1 - Custom Uninformed Search
-echo [6] CUS2 - Weighted A* Search (w=10)
+echo [5] CUS1 - Depth-Limit Search
+echo [6] CUS2 - Weighted A* Search
 echo [0] Back to Main Menu
 echo.
 set /p algo_choice="Enter algorithm choice (0-6): "
@@ -309,7 +309,7 @@ echo   BFS  - Breadth-First Search (Uninformed)
 echo   DFS  - Depth-First Search (Uninformed)
 echo   GBFS - Greedy Best-First Search (Informed)
 echo   AS   - A* Search (Informed, Optimal)
-echo   CUS1 - Custom Uninformed (First path found)
+echo   CUS1 - Depth-Limit Search (Uninformed)
 echo   CUS2 - Weighted A* (Fast, suboptimal)
 echo.
 echo USAGE:
